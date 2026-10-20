@@ -131,8 +131,8 @@ uv run --locked pytest -q
 uv build --no-sources
 ```
 
-The tests use fake Graph responses and Azure Identity credentials. They never access a
-tenant, download the asset pack, or render private Teams content. To exercise
+The default tests use fake Graph responses and Azure Identity credentials. They
+never access a tenant, download assets or models, or render private Teams content. To exercise
 the complete video encoder with local fixture messages, run:
 
 ```bash
@@ -140,6 +140,7 @@ uv run --locked pytest -q -m asset_integration
 ```
 
 That test calls `objectionengine2.utils.ensure_assets_are_available()` first,
-which populates the platform cache when necessary. A live Teams render still
+then renders with default Hugging Face sentiment. It populates the platform
+cache with assets and the model when necessary. A live Teams render still
 requires a link, sign-in, and Graph consent; it cannot be validated by the
 offline suite.

@@ -7,7 +7,7 @@ requires-python = ">=3.10,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
-    "objectionengine2[sentiment] @ git+https://github.com/daddycocoaman/objectionengine2.git@d1a1552fc3bf941722b855207701aff88ad5d111",
+    "objectionengine2[sentiment] @ git+https://github.com/daddycocoaman/objectionengine2.git@55d967580118c41048b5764b5ed8e0823d9b72d2",
     "azure-identity>=1.25,<2",
     "requests>=2.32,<3",
     "torch>=2.8,<3",
