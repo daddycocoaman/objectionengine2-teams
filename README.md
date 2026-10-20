@@ -47,8 +47,8 @@ message becomes a short placeholder.
 ## Sign-in and permissions
 
 The default public client ID is the requested Microsoft Office ID,
-`d3590ed6-52b3-4102-aeff-aad2292ab01c`. The CLI starts MSAL device-code
-sign-in and requests only the delegated permission needed for the link:
+`d3590ed6-52b3-4102-aeff-aad2292ab01c`. Azure Identity opens a browser for
+sign-in by default and requests only the delegated permission needed for the link:
 
 | Link | Delegated Microsoft Graph permission |
 | --- | --- |
@@ -60,7 +60,25 @@ reject this client or require administrator consent, especially for the channel
 permission. The client ID does not itself guarantee a grant. If the Office
 client cannot obtain the requested scope, register a public client application
 in your tenant with the Graph delegated permission and pass its ID through
-`--client-id`. The library does not store tokens on disk.
+`--client-id`. Browser sign-in uses `http://localhost:8400` as its callback;
+the URI must be registered for the selected client. Use `--redirect-uri` if your
+app registration uses another local callback.
+
+For WSL, SSH, or another environment where browser sign-in is inconvenient,
+use device-code sign-in:
+
+```bash
+uv run --locked objectionengine2-teams '<Teams message link>' \
+  --auth-method device-code -o outputs/teams.mp4
+```
+
+Azure Identity persists tokens in a per-user cache and reuses them on later
+runs. It encrypts the cache when the platform supports it; on platforms without
+user-data encryption (including some WSL installations), it may store tokens
+unencrypted. Keep your user profile private. A separate non-secret account
+record is saved under the user state directory
+(`~/.local/state/objectionengine2-teams/` on Linux unless `XDG_STATE_HOME` is
+set). The two sign-in methods share the same cache and account record.
 
 ## Python API
 
@@ -72,9 +90,10 @@ render_teams_link(start_message_url, "outputs/teams.mp4", end_link=end_message_u
 ```
 
 `fetch_comments` returns `objectionengine2.beans.comment.Comment` objects.
-Both calls use the device-code flow; calling them separately signs in twice.
-To inspect messages and render in a single sign-in, use the comments with
-`objectionengine2.renderer.render_comment_list` directly.
+Both calls default to browser sign-in. Pass `auth_method="device-code"` to use
+device-code sign-in. Later calls reuse the cached account and token when valid.
+To inspect messages and render without fetching them twice, use the comments
+with `objectionengine2.renderer.render_comment_list` directly.
 
 ## Tests
 
@@ -84,7 +103,7 @@ uv run --locked pytest -q
 uv build --no-sources
 ```
 
-The tests use fake Graph responses and MSAL clients. They never access a
+The tests use fake Graph responses and Azure Identity credentials. They never access a
 tenant, download the asset pack, or render private Teams content. To exercise
 the complete video encoder with local fixture messages, run:
 

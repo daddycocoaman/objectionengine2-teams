@@ -8,7 +8,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "objectionengine2 @ git+https://github.com/daddycocoaman/objectionengine2.git@1c3095ed1442fa2d04778aab9fc0693bcec15766",
-    "msal>=1.34,<2",
+    "azure-identity>=1.25,<2",
     "requests>=2.32,<3",
 ]
 

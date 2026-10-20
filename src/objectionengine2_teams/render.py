@@ -5,7 +5,7 @@ from pathlib import Path
 from objectionengine2.beans.comment import Comment
 from objectionengine2.renderer import render_comment_list
 
-from .auth import OFFICE_CLIENT_ID, acquire_access_token
+from .auth import BROWSER_REDIRECT_URI, OFFICE_CLIENT_ID, acquire_access_token
 from .convert import messages_to_comments
 from .graph import GraphClient
 from .links import TeamsTarget, parse_teams_link
@@ -37,12 +37,20 @@ def fetch_comments(
     end_link: str | None = None,
     max_messages: int | None = None,
     client_id: str = OFFICE_CLIENT_ID,
+    auth_method: str = "browser",
+    redirect_uri: str = BROWSER_REDIRECT_URI,
 ) -> list[Comment]:
     """Read a Teams conversation from the linked message through an optional end."""
     target = parse_teams_link(link)
     end = _end_target(target, end_link)
     tenant_id = target.tenant_id or (end.tenant_id if end else None)
-    token = acquire_access_token(target.kind, tenant_id=tenant_id, client_id=client_id)
+    token = acquire_access_token(
+        target.kind,
+        tenant_id=tenant_id,
+        client_id=client_id,
+        auth_method=auth_method,
+        redirect_uri=redirect_uri,
+    )
     with GraphClient(token) as graph:
         messages = (
             graph.iter_messages(target, end_message_id=end.start_message_id)
@@ -64,12 +72,19 @@ def render_teams_link(
     end_link: str | None = None,
     max_messages: int | None = None,
     client_id: str = OFFICE_CLIENT_ID,
+    auth_method: str = "browser",
+    redirect_uri: str = BROWSER_REDIRECT_URI,
     music_code: str = "pwr",
     resolution_scale: float = 1,
 ) -> Path:
     """Render a Teams conversation, starting at the linked message, to MP4."""
     comments = fetch_comments(
-        link, end_link=end_link, max_messages=max_messages, client_id=client_id
+        link,
+        end_link=end_link,
+        max_messages=max_messages,
+        client_id=client_id,
+        auth_method=auth_method,
+        redirect_uri=redirect_uri,
     )
     if not comments:
         raise ValueError("This Teams conversation has no renderable messages")

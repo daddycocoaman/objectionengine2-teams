@@ -2,7 +2,7 @@
 
 import argparse
 
-from .auth import AuthenticationError, OFFICE_CLIENT_ID
+from .auth import AuthenticationError, BROWSER_REDIRECT_URI, OFFICE_CLIENT_ID
 from .graph import GraphError
 from .render import render_teams_link
 
@@ -20,6 +20,14 @@ def main(argv: list[str] | None = None) -> int:
         help="At most N messages from the start link, or the newest N for a whole chat/channel",
     )
     parser.add_argument("--client-id", default=OFFICE_CLIENT_ID, help="Public client application ID")
+    parser.add_argument(
+        "--auth-method", choices=("browser", "device-code"), default="browser",
+        help="Sign-in method (default: browser)",
+    )
+    parser.add_argument(
+        "--redirect-uri", default=BROWSER_REDIRECT_URI,
+        help="Registered redirect URI for browser sign-in",
+    )
     parser.add_argument("--music-code", default="pwr", help="Objection Engine music code")
     parser.add_argument("--resolution-scale", type=float, default=1.0)
     args = parser.parse_args(argv)
@@ -32,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
             end_link=args.end_link,
             max_messages=args.max_messages,
             client_id=args.client_id,
+            auth_method=args.auth_method,
+            redirect_uri=args.redirect_uri,
             music_code=args.music_code,
             resolution_scale=args.resolution_scale,
         )

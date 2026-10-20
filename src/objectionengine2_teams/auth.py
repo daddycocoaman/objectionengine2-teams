@@ -1,13 +1,78 @@
-"""Delegated Microsoft Graph authentication through MSAL device code flow."""
+"""Delegated Microsoft Graph authentication with a persistent Azure Identity cache."""
 
-from collections.abc import Callable
+import hashlib
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+from azure.core.exceptions import AzureError
+from azure.identity import (
+    AuthenticationRecord,
+    DeviceCodeCredential,
+    InteractiveBrowserCredential,
+    TokenCachePersistenceOptions,
+)
 
 OFFICE_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
-_SCOPES = {"chat": ["Chat.Read"], "channel": ["ChannelMessage.Read.All"]}
+BROWSER_REDIRECT_URI = "http://localhost:8400"
+_SCOPES = {
+    "chat": "https://graph.microsoft.com/Chat.Read",
+    "channel": "https://graph.microsoft.com/ChannelMessage.Read.All",
+}
 
 
 class AuthenticationError(RuntimeError):
     """Microsoft Entra ID did not issue a usable Graph token."""
+
+
+def _state_dir() -> Path:
+    """Return the per-user directory for non-secret authentication records."""
+    if os.name == "nt":
+        root = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support"
+    else:
+        root = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    return root / "objectionengine2-teams"
+
+
+def _cache_key(client_id: str, tenant_id: str) -> str:
+    return hashlib.sha256(f"{client_id.lower()}\0{tenant_id.lower()}".encode()).hexdigest()[:24]
+
+
+def _load_record(path: Path, client_id: str) -> AuthenticationRecord | None:
+    try:
+        serialized = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise AuthenticationError(f"Could not read the cached account record at {path}: {exc}") from exc
+    try:
+        record = AuthenticationRecord.deserialize(serialized)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise AuthenticationError(
+            f"The cached account record at {path} is invalid. Delete it and sign in again."
+        ) from exc
+    return record if record.client_id.lower() == client_id.lower() else None
+
+
+def _save_record(path: Path, record: AuthenticationRecord) -> None:
+    """Atomically save account identity; Azure Identity stores tokens separately."""
+    temporary_path: Path | None = None
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=".account-", delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(record.serialize())
+        os.replace(temporary_path, path)
+    except OSError as exc:
+        raise AuthenticationError(f"Could not save the cached account record at {path}: {exc}") from exc
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def acquire_access_token(
@@ -15,42 +80,51 @@ def acquire_access_token(
     *,
     tenant_id: str | None = None,
     client_id: str = OFFICE_CLIENT_ID,
-    show_device_code: Callable[[str], None] = print,
-    app_factory: Callable[..., object] | None = None,
+    auth_method: str = "browser",
+    redirect_uri: str = BROWSER_REDIRECT_URI,
+    record_dir: str | Path | None = None,
 ) -> str:
-    """Sign in with the requested delegated read permission.
+    """Return a Graph token, reusing the user's cached account when possible.
 
-    The default client ID is the Microsoft Office ID requested by this project.
-    A tenant may deny that client or require administrator consent, especially
-    for ChannelMessage.Read.All. Callers can supply their own public-client ID.
+    Browser sign-in is the default. Set ``auth_method='device-code'`` for an
+    environment where a local browser cannot be opened. Both methods use the
+    Microsoft Office public client ID unless a different ID is supplied.
     """
     if kind not in _SCOPES:
         raise ValueError("kind must be 'chat' or 'channel'")
-    if app_factory is None:
-        from msal import PublicClientApplication
+    if auth_method not in ("browser", "device-code"):
+        raise ValueError("auth_method must be 'browser' or 'device-code'")
 
-        app_factory = PublicClientApplication
-
-    authority = f"https://login.microsoftonline.com/{tenant_id or 'organizations'}"
-    app = app_factory(client_id=client_id, authority=authority)
-    scopes = _SCOPES[kind]
-
-    for account in app.get_accounts():
-        result = app.acquire_token_silent(scopes, account=account)
-        if result and result.get("access_token"):
-            return result["access_token"]
-
-    flow = app.initiate_device_flow(scopes=scopes)
-    if "user_code" not in flow:
-        detail = flow.get("error_description") or flow.get("error") or "unknown error"
-        raise AuthenticationError(f"Unable to start Microsoft sign-in: {detail}")
-    show_device_code(flow["message"])
-    result = app.acquire_token_by_device_flow(flow)
-    if "access_token" not in result:
-        detail = result.get("error_description") or result.get("error") or "unknown error"
+    tenant = tenant_id or "organizations"
+    key = _cache_key(client_id, tenant)
+    record_path = (Path(record_dir) if record_dir is not None else _state_dir()) / f"{key}.json"
+    record = _load_record(record_path, client_id)
+    options = TokenCachePersistenceOptions(
+        name=f"objectionengine2-teams-{key}", allow_unencrypted_storage=True
+    )
+    kwargs = {
+        "client_id": client_id,
+        "tenant_id": tenant,
+        "cache_persistence_options": options,
+    }
+    if record is not None:
+        kwargs["authentication_record"] = record
+    scope = _SCOPES[kind]
+    credential = None
+    try:
+        if auth_method == "browser":
+            credential = InteractiveBrowserCredential(redirect_uri=redirect_uri, **kwargs)
+        else:
+            credential = DeviceCodeCredential(**kwargs)
+        if record is None:
+            record = credential.authenticate(scopes=[scope])
+            _save_record(record_path, record)
+        return credential.get_token(scope).token
+    except AzureError as exc:
         raise AuthenticationError(
-            f"Microsoft sign-in did not grant {scopes[0]} to client {client_id}: {detail}. "
-            "Ask your tenant administrator to grant the permission, or use --client-id "
-            "with a public app registration that has it."
-        )
-    return result["access_token"]
+            f"Microsoft sign-in could not grant {scope} to client {client_id}: {exc}. "
+            "Your tenant may require administrator consent for this Graph permission."
+        ) from exc
+    finally:
+        if credential is not None:
+            credential.close()

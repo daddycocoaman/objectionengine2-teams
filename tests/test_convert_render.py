@@ -135,6 +135,35 @@ def test_fetch_comments_connects_link_auth_and_graph(monkeypatch):
     )
     assert [comment.text_content for comment in comments] == ["Objection!"]
     assert auth_calls[0][0] == ("chat",)
+    assert auth_calls[0][1]["auth_method"] == "browser"
+
+
+def test_fetch_comments_passes_device_code_method(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        render_module, "acquire_access_token",
+        lambda *args, **kwargs: calls.append(kwargs) or "token",
+    )
+
+    class FakeGraph:
+        def __init__(self, token):
+            assert token == "token"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_messages(self, target):
+            return iter(())
+
+    monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
+    render_module.fetch_comments(
+        "https://teams.microsoft.com/l/chat/19:abc@thread.v2/conversations",
+        auth_method="device-code",
+    )
+    assert calls[0]["auth_method"] == "device-code"
 
 
 def test_render_bridge_passes_comments_to_core(monkeypatch, tmp_path):
