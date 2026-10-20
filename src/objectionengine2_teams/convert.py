@@ -36,7 +36,9 @@ class _TeamsHTMLParser(HTMLParser):
             self.parts.append(data)
 
 
-def _body_text(message: dict[str, Any]) -> str:
+def _message_text(message: dict[str, Any]) -> str:
+    subject = message.get("subject")
+    title = re.sub(r"\s+", " ", subject).strip() if isinstance(subject, str) else ""
     body = message.get("body") or {}
     if not isinstance(body, dict):
         body = {}
@@ -49,14 +51,13 @@ def _body_text(message: dict[str, Any]) -> str:
         content = "".join(parser.parts)
     lines = [re.sub(r"\s+", " ", line).strip() for line in content.splitlines()]
     text = "\n".join(line for line in lines if line)
-    if text:
-        return text
-    attachments = message.get("attachments") or []
-    if isinstance(attachments, list) and attachments:
-        names = [attachment.get("name") for attachment in attachments if isinstance(attachment, dict)]
-        names = [name for name in names if isinstance(name, str) and name.strip()]
-        return "Shared an attachment" + (": " + ", ".join(names) if names else "")
-    return ""
+    if not text:
+        attachments = message.get("attachments") or []
+        if isinstance(attachments, list) and attachments:
+            names = [attachment.get("name") for attachment in attachments if isinstance(attachment, dict)]
+            names = [name for name in names if isinstance(name, str) and name.strip()]
+            text = "Shared an attachment" + (": " + ", ".join(names) if names else "")
+    return "\n".join(part for part in (title, text) if part)
 
 
 def _speaker(message: dict[str, Any]) -> tuple[str, str]:
@@ -108,7 +109,7 @@ def messages_to_comments(
     for message in ordered[start : end + 1]:
         if message.get("messageType", "message") != "message" or message.get("deletedDateTime"):
             continue
-        text = _body_text(message)
+        text = _message_text(message)
         if not text:
             continue
         user_id, user_name = _speaker(message)

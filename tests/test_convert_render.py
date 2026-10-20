@@ -41,6 +41,31 @@ def test_attachment_only_message_uses_placeholder():
     assert messages_to_comments([message])[0].text_content == "Shared an attachment: chart.png"
 
 
+def test_thread_title_is_included_with_root_message_and_respects_range():
+    root = _message(
+        "100", "2026-01-01T00:00:00Z", "<p>Body &amp; details</p>",
+        subject="  Important   update  ",
+    )
+    reply = _message("101", "2026-01-02T00:00:00Z", "<p>Reply</p>")
+
+    comments = messages_to_comments([reply, root])
+    assert [comment.text_content for comment in comments] == [
+        "Important update\nBody & details", "Reply",
+    ]
+    assert comments[0].user_name == "Alex"
+    assert [comment.text_content for comment in messages_to_comments(
+        [root, reply], start_message_id="101"
+    )] == ["Reply"]
+
+
+def test_title_only_root_is_renderable_and_blank_title_is_ignored():
+    title_only = _message("100", "2026-01-01T00:00:00Z", "", subject="Topic")
+    no_title = _message("101", "2026-01-02T00:00:00Z", "Body", subject="  ")
+    assert [comment.text_content for comment in messages_to_comments([no_title, title_only])] == [
+        "Topic", "Body",
+    ]
+
+
 def test_message_range_is_inclusive_and_starts_at_path_id():
     messages = [
         _message(str(number), f"2026-01-0{number}T00:00:00Z", str(number))
@@ -99,12 +124,48 @@ def test_fetch_comments_renders_only_requested_channel_thread_range(monkeypatch)
             assert target.start_message_id == "101"
             assert end_message_id == "102"
             return iter(
-                [_message(str(i), f"2026-01-0{i - 99}T00:00:00Z", str(i)) for i in (102, 100, 103, 101)]
+                [
+                    _message(str(i), f"2026-01-0{i - 99}T00:00:00Z", str(i),
+                             subject="Thread title" if i == 100 else None)
+                    for i in (102, 100, 103, 101)
+                ]
             )
 
     monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
     assert [comment.text_content for comment in render_module.fetch_comments(start, end_link=end)] == [
         "101", "102"
+    ]
+
+
+def test_fetch_comments_includes_channel_thread_title(monkeypatch):
+    group_id = "72602e12-78ac-474c-99d6-f619710353a9"
+    link = (
+        "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/100"
+        f"?groupId={group_id}&parentMessageId=100"
+    )
+    monkeypatch.setattr(render_module, "acquire_access_token", lambda *args, **kwargs: "token")
+
+    class FakeGraph:
+        def __init__(self, token):
+            assert token == "token"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_messages(self, target):
+            assert target.start_message_id == target.parent_message_id == "100"
+            return iter([
+                _message("100", "2026-01-01T00:00:00Z", "<p>First post</p>",
+                         subject="Thread title"),
+                _message("101", "2026-01-02T00:00:00Z", "<p>Reply</p>"),
+            ])
+
+    monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
+    assert [comment.text_content for comment in render_module.fetch_comments(link)] == [
+        "Thread title\nFirst post", "Reply",
     ]
 
 

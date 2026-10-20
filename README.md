@@ -46,9 +46,11 @@ uv run --locked objectionengine2-teams \
 
 Both endpoints are included. `--max-messages 20` selects the first 20 rendered
 messages after a start link, or the newest 20 for an unbounded chat/channel
-link. The CLI sorts them by creation time. Rich attachments, reactions,
-deleted messages, and system events are not represented; an attachment-only
-message becomes a short placeholder.
+link. The CLI sorts them by creation time. When a channel thread's first
+message has a title, it appears before that message's body in its comment.
+Starting from a later reply excludes the first message and its title. Rich
+attachments, reactions, deleted messages, and system events are not represented;
+an attachment-only message becomes a short placeholder.
 
 ## Sign-in and permissions
 
