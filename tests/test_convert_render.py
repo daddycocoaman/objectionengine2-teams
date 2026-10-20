@@ -39,6 +39,73 @@ def test_attachment_only_message_uses_placeholder():
     assert messages_to_comments([message])[0].text_content == "Shared an attachment: chart.png"
 
 
+def test_message_range_is_inclusive_and_starts_at_path_id():
+    messages = [
+        _message(str(number), f"2026-01-0{number}T00:00:00Z", str(number))
+        for number in range(1, 5)
+    ]
+    comments = messages_to_comments(
+        reversed(messages), start_message_id="2", end_message_id="3"
+    )
+    assert [comment.text_content for comment in comments] == ["2", "3"]
+    comments = messages_to_comments(messages, start_message_id="2", max_messages=1)
+    assert [comment.text_content for comment in comments] == ["2"]
+
+
+def test_message_range_rejects_missing_or_reversed_boundaries():
+    messages = [_message(str(i), f"2026-01-0{i}T00:00:00Z", str(i)) for i in range(1, 4)]
+    with pytest.raises(ValueError, match="Start message.*not found"):
+        messages_to_comments(messages, start_message_id="9")
+    with pytest.raises(ValueError, match="End message.*not found"):
+        messages_to_comments(messages, start_message_id="1", end_message_id="9")
+    with pytest.raises(ValueError, match="end message occurs before"):
+        messages_to_comments(messages, start_message_id="3", end_message_id="2")
+
+
+def test_end_link_must_select_same_channel_thread_before_sign_in():
+    start = (
+        "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/101"
+        "?groupId=72602e12-78ac-474c-99d6-f619710353a9&parentMessageId=100"
+    )
+    end = (
+        "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/102"
+        "?groupId=72602e12-78ac-474c-99d6-f619710353a9&parentMessageId=999"
+    )
+    with pytest.raises(ValueError, match="same channel thread"):
+        render_module.fetch_comments(start, end_link=end)
+
+
+def test_fetch_comments_renders_only_requested_channel_thread_range(monkeypatch):
+    group_id = "72602e12-78ac-474c-99d6-f619710353a9"
+    base = "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/"
+    start = f"{base}101?groupId={group_id}&parentMessageId=100"
+    end = f"{base}102?groupId={group_id}&parentMessageId=100"
+    monkeypatch.setattr(render_module, "acquire_access_token", lambda *args, **kwargs: "token")
+
+    class FakeGraph:
+        def __init__(self, token):
+            assert token == "token"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_messages(self, target, *, end_message_id=None):
+            assert target.parent_message_id == "100"
+            assert target.start_message_id == "101"
+            assert end_message_id == "102"
+            return iter(
+                [_message(str(i), f"2026-01-0{i - 99}T00:00:00Z", str(i)) for i in (102, 100, 103, 101)]
+            )
+
+    monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
+    assert [comment.text_content for comment in render_module.fetch_comments(start, end_link=end)] == [
+        "101", "102"
+    ]
+
+
 def test_fetch_comments_connects_link_auth_and_graph(monkeypatch):
     auth_calls = []
     monkeypatch.setattr(

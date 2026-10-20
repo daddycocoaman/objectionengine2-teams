@@ -27,9 +27,20 @@ uv run --project ../objectionengine2-teams objectionengine2-teams \
 ```
 
 Replace the example URL with a real link copied from a chat or channel. A
-message link selects the whole conversation. Channel renders include replies.
-Use `--max-messages 20` to render only the newest 20 text messages. The CLI
-sorts them by creation time before rendering. Rich attachments, reactions,
+channel link renders the channel; a channel **message link** renders only its
+thread. Its `parentMessageId` identifies the thread root, while the message ID
+in the URL path is the first message rendered. A chat message link likewise
+starts at the linked message. You can bound the render with another message
+link in the same chat or channel thread:
+
+```bash
+uv run --project ../objectionengine2-teams --locked objectionengine2-teams \
+  '<start message link>' --end-link '<end message link>' -o outputs/teams.mp4
+```
+
+Both endpoints are included. `--max-messages 20` selects the first 20 rendered
+messages after a start link, or the newest 20 for an unbounded chat/channel
+link. The CLI sorts them by creation time. Rich attachments, reactions,
 deleted messages, and system events are not represented; an attachment-only
 message becomes a short placeholder.
 
@@ -56,8 +67,8 @@ in your tenant with the Graph delegated permission and pass its ID through
 ```python
 from objectionengine2_teams import fetch_comments, render_teams_link
 
-comments = fetch_comments(teams_url, max_messages=20)
-render_teams_link(teams_url, "outputs/teams.mp4", max_messages=20)
+comments = fetch_comments(start_message_url, end_link=end_message_url)
+render_teams_link(start_message_url, "outputs/teams.mp4", end_link=end_message_url)
 ```
 
 `fetch_comments` returns `objectionengine2.beans.comment.Comment` objects.

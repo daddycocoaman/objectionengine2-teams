@@ -35,7 +35,9 @@ def test_chat_pagination_and_token_header():
     graph = GraphClient("secret-token", session=session)
     target = TeamsTarget("chat", chat_id="19:abc@thread.v2")
     assert [item["id"] for item in graph.iter_messages(target)] == ["2", "1"]
-    assert session.calls[0][0].endswith("/chats/19%3Aabc%40thread.v2/messages?$top=50")
+    assert session.calls[0][0].endswith(
+        "/chats/19%3Aabc%40thread.v2/messages?$top=50&$orderby=createdDateTime desc"
+    )
     assert session.calls[1][0] == next_url
     assert session.calls[0][1]["headers"]["Authorization"] == "Bearer secret-token"
     assert session.calls[0][1]["allow_redirects"] is False
@@ -54,6 +56,36 @@ def test_channel_fetches_paginated_replies():
     target = TeamsTarget("channel", team_id="team", channel_id="channel")
     assert [item["id"] for item in graph.iter_messages(target)] == ["7", "8", "9"]
     assert session.calls[1][0].endswith("/messages/7/replies?$top=50")
+
+
+def test_channel_message_link_fetches_only_its_thread():
+    session = FakeSession(
+        [
+            FakeResponse({"id": "100", "body": {"content": "root"}}),
+            FakeResponse({"value": [{"id": "101"}, {"id": "102"}]}),
+        ]
+    )
+    graph = GraphClient("token", session=session)
+    target = TeamsTarget(
+        "channel", team_id="team", channel_id="channel",
+        start_message_id="101", parent_message_id="100",
+    )
+    assert [item["id"] for item in graph.iter_messages(target)] == ["100", "101", "102"]
+    assert [call[0] for call in session.calls] == [
+        "https://graph.microsoft.com/v1.0/teams/team/channels/channel/messages/100",
+        "https://graph.microsoft.com/v1.0/teams/team/channels/channel/messages/100/replies?$top=50",
+    ]
+
+
+def test_chat_message_link_stops_when_start_is_found():
+    next_url = "https://graph.microsoft.com/v1.0/chats/chat/messages?$skiptoken=next"
+    session = FakeSession(
+        [FakeResponse({"value": [{"id": "4"}, {"id": "3"}], "@odata.nextLink": next_url})]
+    )
+    graph = GraphClient("token", session=session)
+    target = TeamsTarget("chat", chat_id="chat", start_message_id="3")
+    assert [item["id"] for item in graph.iter_messages(target)] == ["4", "3"]
+    assert len(session.calls) == 1
 
 
 def test_rejects_external_next_link_before_sending_token():

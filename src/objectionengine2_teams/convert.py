@@ -73,28 +73,46 @@ def _speaker(message: dict[str, Any]) -> tuple[str, str]:
 
 
 def messages_to_comments(
-    messages: Iterable[dict[str, Any]], *, max_messages: int | None = None
+    messages: Iterable[dict[str, Any]],
+    *,
+    start_message_id: str | None = None,
+    end_message_id: str | None = None,
+    max_messages: int | None = None,
 ) -> list[Comment]:
-    """Convert, de-duplicate, and order user messages by creation time."""
+    """Convert an inclusive message range to chronological dialogue."""
     if max_messages is not None and max_messages < 1:
         raise ValueError("max_messages must be positive")
-    ordered: list[tuple[str, str, Comment]] = []
-    seen: set[tuple[str, str]] = set()
+    ordered: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for message in messages:
+        message_id = str(message.get("id") or "")
+        if message_id and message_id in seen:
+            continue
+        seen.add(message_id)
+        ordered.append(message)
+    ordered.sort(key=lambda message: (str(message.get("createdDateTime") or ""), str(message.get("id") or "")))
+
+    ids = [str(message.get("id") or "") for message in ordered]
+    if start_message_id is not None and start_message_id not in ids:
+        raise ValueError(f"Start message {start_message_id} was not found in this conversation")
+    if end_message_id is not None and end_message_id not in ids:
+        raise ValueError(f"End message {end_message_id} was not found in this conversation")
+    if not ordered:
+        return []
+    start = ids.index(start_message_id) if start_message_id is not None else 0
+    end = ids.index(end_message_id) if end_message_id is not None else len(ordered) - 1
+    if end < start:
+        raise ValueError("The end message occurs before the start message")
+
+    comments: list[Comment] = []
+    for message in ordered[start : end + 1]:
         if message.get("messageType", "message") != "message" or message.get("deletedDateTime"):
             continue
         text = _body_text(message)
         if not text:
             continue
-        message_id = str(message.get("id") or "")
-        identity = (str(message.get("replyToId") or ""), message_id)
-        if message_id and identity in seen:
-            continue
-        seen.add(identity)
         user_id, user_name = _speaker(message)
-        comment = Comment(user_id=user_id, user_name=user_name, text_content=text)
-        ordered.append((str(message.get("createdDateTime") or ""), message_id, comment))
-    ordered.sort(key=lambda item: (item[0], item[1]))
+        comments.append(Comment(user_id=user_id, user_name=user_name, text_content=text))
     if max_messages is not None:
-        ordered = ordered[-max_messages:]
-    return [item[2] for item in ordered]
+        comments = comments[:max_messages] if start_message_id else comments[-max_messages:]
+    return comments

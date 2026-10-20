@@ -10,6 +10,7 @@ from uuid import UUID
 
 _TEAMS_HOSTS = {"teams.microsoft.com", "teams.cloud.microsoft"}
 _ID_RE = re.compile(r"^19:[A-Za-z0-9._@:-]{1,500}$")
+_MESSAGE_ID_RE = re.compile(r"^[A-Za-z0-9._@:-]{1,500}$")
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,8 @@ class TeamsTarget:
     team_id: str | None = None
     channel_id: str | None = None
     tenant_id: str | None = None
+    start_message_id: str | None = None
+    parent_message_id: str | None = None
 
 
 def _uuid_parameter(query: dict[str, list[str]], name: str) -> str | None:
@@ -40,10 +43,17 @@ def _teams_id(raw: str) -> str:
     return value
 
 
+def _message_id(raw: str) -> str:
+    value = unquote(raw)
+    if not _MESSAGE_ID_RE.fullmatch(value):
+        raise ValueError("Teams link has an invalid message ID")
+    return value
+
+
 def parse_teams_link(link: str) -> TeamsTarget:
     """Return the conversation addressed by a Teams deep link.
 
-    A message link selects its containing chat or channel, not just one message.
+    A channel message link selects one thread and starts at its path message ID.
     """
     parsed = urlsplit(link)
     if (
@@ -78,10 +88,20 @@ def parse_teams_link(link: str) -> TeamsTarget:
 
     if len(parts) == 4 and parts[:2] == ["l", "message"]:
         conversation_id = _teams_id(parts[2])
-        if not parts[3]:
-            raise ValueError("Message links must contain a message ID")
+        start_message_id = _message_id(parts[3])
         if group_id is not None:
-            return TeamsTarget("channel", team_id=group_id, channel_id=conversation_id, tenant_id=tenant_id)
+            parents = query.get("parentMessageId", [])
+            if len(parents) > 1:
+                raise ValueError("Teams link has more than one parentMessageId parameter")
+            parent_message_id = _message_id(parents[0]) if parents else start_message_id
+            return TeamsTarget(
+                "channel",
+                team_id=group_id,
+                channel_id=conversation_id,
+                tenant_id=tenant_id,
+                start_message_id=start_message_id,
+                parent_message_id=parent_message_id,
+            )
         context_values = query.get("context", [])
         if context_values:
             try:
@@ -92,6 +112,9 @@ def parse_teams_link(link: str) -> TeamsTarget:
                 raise ValueError("A channel message link must include groupId")
         if conversation_id.endswith("@thread.tacv2"):
             raise ValueError("A channel message link must include groupId")
-        return TeamsTarget("chat", chat_id=conversation_id, tenant_id=tenant_id)
+        return TeamsTarget(
+            "chat", chat_id=conversation_id, tenant_id=tenant_id,
+            start_message_id=start_message_id,
+        )
 
     raise ValueError("Unsupported Teams link; copy a chat, channel, or message link from Teams")

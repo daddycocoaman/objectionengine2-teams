@@ -16,6 +16,8 @@ def test_chat_and_chat_message_links():
     )
     assert direct.kind == message.kind == "chat"
     assert direct.chat_id == message.chat_id == chat
+    assert direct.start_message_id is None
+    assert message.start_message_id == "1563480968434"
 
 
 def test_channel_and_channel_message_links():
@@ -32,6 +34,17 @@ def test_channel_and_channel_message_links():
     assert direct.channel_id == message.channel_id == channel
     assert direct.team_id == message.team_id == TEAM
     assert direct.tenant_id == TENANT
+    assert message.start_message_id == message.parent_message_id == "1648741500652"
+
+
+def test_channel_reply_link_preserves_thread_root_and_selected_message():
+    target = parse_teams_link(
+        "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/1790883499999"
+        f"?tenantId={TENANT}&groupId={TEAM}&parentMessageId=1790883478616"
+    )
+    assert target.kind == "channel"
+    assert target.start_message_id == "1790883499999"
+    assert target.parent_message_id == "1790883478616"
 
 
 def test_team_link_identifies_channel():
@@ -51,6 +64,7 @@ def test_team_link_identifies_channel():
         "https://teams.microsoft.com/l/chat/0/0?users=a@example.com",
         "https://teams.microsoft.com/l/channel/19:abc@thread.tacv2/General",
         "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/1",
+        f"https://teams.microsoft.com/l/message/19:abc@thread.tacv2/1?groupId={TEAM}&parentMessageId=bad/id",
         f"https://teams.microsoft.com/l/channel/19:abc@thread.tacv2/General?groupId=bad",
     ],
 )

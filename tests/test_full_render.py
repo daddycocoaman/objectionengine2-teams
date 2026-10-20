@@ -32,24 +32,34 @@ def test_renders_mp4_after_ensuring_assets(monkeypatch, tmp_path):
         def __exit__(self, *_args):
             return None
 
-        def iter_messages(self, target):
-            assert target.kind == "chat"
+        def iter_messages(self, target, *, end_message_id=None):
+            assert target.kind == "channel"
+            assert target.parent_message_id == "100"
+            assert target.start_message_id == "101"
+            assert end_message_id == "102"
             return iter(
                 [
                     {
-                        "id": "1",
-                        "createdDateTime": "2026-01-01T00:00:00Z",
+                        "id": str(message_id),
+                        "createdDateTime": f"2026-01-0{message_id - 99}T00:00:00Z",
                         "messageType": "message",
                         "from": {"user": {"id": "alex", "displayName": "Alex"}},
-                        "body": {"contentType": "html", "content": "<p>Objection!</p>"},
+                        "body": {"contentType": "html", "content": f"<p>{text}</p>"},
                     }
+                    for message_id, text in (
+                        (100, "Earlier"), (101, "Objection!"),
+                        (102, "Hold it!"), (103, "After"),
+                    )
                 ]
             )
 
     monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
     output = tmp_path / "teams.mp4"
+    group_id = "72602e12-78ac-474c-99d6-f619710353a9"
+    base = "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/"
     render_module.render_teams_link(
-        "https://teams.microsoft.com/l/chat/19:abc@thread.v2/conversations", output
+        f"{base}101?groupId={group_id}&parentMessageId=100", output,
+        end_link=f"{base}102?groupId={group_id}&parentMessageId=100",
     )
     assert output.is_file()
     assert output.stat().st_size > 1000

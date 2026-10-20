@@ -127,16 +127,39 @@ class GraphClient:
                 raise GraphError("Microsoft Graph returned a malformed pagination URL")
             url = next_url or ""
 
-    def iter_messages(self, target: TeamsTarget) -> Iterator[dict[str, Any]]:
-        """Yield chat messages or channel roots and all their replies."""
+    def iter_messages(
+        self, target: TeamsTarget, *, end_message_id: str | None = None
+    ) -> Iterator[dict[str, Any]]:
+        """Yield chat messages, one channel thread, or a complete channel."""
         if target.kind == "chat" and target.chat_id:
             chat = quote(target.chat_id, safe="")
-            yield from self._pages(f"{_GRAPH_ROOT}/chats/{chat}/messages?$top=50", "Chat.Read")
+            url = f"{_GRAPH_ROOT}/chats/{chat}/messages?$top=50&$orderby=createdDateTime desc"
+            found_start = False
+            found_end = end_message_id is None
+            for message in self._pages(url, "Chat.Read"):
+                yield message
+                if str(message.get("id")) == target.start_message_id:
+                    found_start = True
+                if str(message.get("id")) == end_message_id:
+                    found_end = True
+                if target.start_message_id and found_start and found_end:
+                    break
             return
         if target.kind == "channel" and target.team_id and target.channel_id:
             team = quote(target.team_id, safe="")
             channel = quote(target.channel_id, safe="")
             root = f"{_GRAPH_ROOT}/teams/{team}/channels/{channel}/messages"
+            if target.start_message_id:
+                parent_id = target.parent_message_id or target.start_message_id
+                thread_url = f"{root}/{quote(parent_id, safe='')}"
+                parent = self._get_json(thread_url, "ChannelMessage.Read.All")
+                if str(parent.get("id")) != parent_id:
+                    raise GraphError("Microsoft Graph returned a different channel thread")
+                yield parent
+                yield from self._pages(
+                    f"{thread_url}/replies?$top=50", "ChannelMessage.Read.All"
+                )
+                return
             for message in self._pages(f"{root}?$top=50", "ChannelMessage.Read.All"):
                 yield message
                 message_id = message.get("id")
