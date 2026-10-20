@@ -12,6 +12,9 @@ dependencies = [
     "requests>=2.32,<3",
 ]
 
+[project.optional-dependencies]
+sentiment = ["objectionengine2[sentiment]"]
+
 [project.scripts]
 objectionengine2-teams = "objectionengine2_teams.cli:main"
 

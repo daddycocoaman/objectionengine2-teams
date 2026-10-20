@@ -80,6 +80,28 @@ record is saved under the user state directory
 (`~/.local/state/objectionengine2-teams/` on Linux unless `XDG_STATE_HOME` is
 set). The two sign-in methods share the same cache and account record.
 
+## Sentiment and objections
+
+Teams messages have no explicit `Comment.score`, so the core renderer treats
+them as neutral by default. Enable its Hugging Face sentiment model with the
+Teams package's optional `sentiment` extra and `oe_sentiment_model=hf`. From the
+adjacent core checkout, where `assets/` is available:
+
+```bash
+env -u oe_bypass_sentiment oe_sentiment_model=hf \
+  uv run --project ../objectionengine2-teams --locked --extra sentiment \
+  objectionengine2-teams '<Teams message link>' -o outputs/teams.mp4
+```
+
+The first run downloads the sentiment model. A strongly negative classification
+(confidence above 0.5) has roughly a 70% chance of triggering an objection;
+a strongly positive one has roughly a 30% chance. An objection is therefore
+possible, not guaranteed, for any particular message. If you need to choose
+the sentiment yourself, call `fetch_comments`, set `comment.score` to a negative
+or positive value above 0.5 in magnitude, then pass the comments to
+`objectionengine2.renderer.render_comment_list`. The objection still has a
+random chance of occurring.
+
 ## Python API
 
 ```python
