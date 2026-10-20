@@ -1,5 +1,7 @@
 """Public Teams-to-video API."""
 
+from contextlib import contextmanager
+import os
 from pathlib import Path
 
 from objectionengine2.beans.comment import Comment
@@ -9,6 +11,19 @@ from .auth import BROWSER_REDIRECT_URI, OFFICE_CLIENT_ID, acquire_access_token
 from .convert import messages_to_comments
 from .graph import GraphClient
 from .links import TeamsTarget, parse_teams_link
+
+
+@contextmanager
+def _default_sentiment():
+    """Select Hugging Face for this render unless the caller chose a core mode."""
+    if "oe_sentiment_model" in os.environ:
+        yield
+        return
+    os.environ["oe_sentiment_model"] = "hf"
+    try:
+        yield
+    finally:
+        os.environ.pop("oe_sentiment_model", None)
 
 
 def _end_target(start: TeamsTarget, end_link: str | None) -> TeamsTarget | None:
@@ -89,10 +104,11 @@ def render_teams_link(
     if not comments:
         raise ValueError("This Teams conversation has no renderable messages")
     output = Path(output_filename)
-    render_comment_list(
-        comments,
-        output_filename=str(output),
-        music_code=music_code,
-        resolution_scale=resolution_scale,
-    )
+    with _default_sentiment():
+        render_comment_list(
+            comments,
+            output_filename=str(output),
+            music_code=music_code,
+            resolution_scale=resolution_scale,
+        )
     return output

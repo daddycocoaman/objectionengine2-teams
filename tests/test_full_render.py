@@ -14,6 +14,7 @@ pytestmark = pytest.mark.asset_integration
 
 
 def test_renders_mp4_after_ensuring_assets(monkeypatch, tmp_path):
+    monkeypatch.setenv("oe_bypass_sentiment", "1")
     core_checkout = Path(__file__).resolve().parents[2] / "objectionengine2"
     if not core_checkout.is_dir():
         pytest.skip("Adjacent objectionengine2 checkout is required")

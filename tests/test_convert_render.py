@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from objectionengine2.beans.comment import Comment
@@ -167,13 +169,55 @@ def test_fetch_comments_passes_device_code_method(monkeypatch):
 
 
 def test_render_bridge_passes_comments_to_core(monkeypatch, tmp_path):
+    monkeypatch.delenv("oe_sentiment_model", raising=False)
+    monkeypatch.delenv("oe_bypass_sentiment", raising=False)
     comments = [Comment(user_id="alex", user_name="Alex", text_content="Objection!")]
     calls = []
     monkeypatch.setattr(render_module, "fetch_comments", lambda *args, **kwargs: comments)
-    monkeypatch.setattr(render_module, "render_comment_list", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    def fake_render(*args, **kwargs):
+        assert os.environ["oe_sentiment_model"] == "hf"
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(render_module, "render_comment_list", fake_render)
     output = tmp_path / "teams.mp4"
     assert render_module.render_teams_link("https://example.invalid", output, max_messages=1) == output
     assert calls == [((comments,), {"output_filename": str(output), "music_code": "pwr", "resolution_scale": 1})]
+    assert "oe_sentiment_model" not in os.environ
+
+
+def test_render_respects_explicit_neutral_sentiment(monkeypatch):
+    monkeypatch.setenv("oe_sentiment_model", "neutral")
+    monkeypatch.setattr(
+        render_module, "fetch_comments",
+        lambda *args, **kwargs: [Comment(text_content="Hello")],
+    )
+    modes = []
+    monkeypatch.setattr(
+        render_module,
+        "render_comment_list",
+        lambda *args, **kwargs: modes.append(os.environ["oe_sentiment_model"]),
+    )
+    render_module.render_teams_link("https://example.invalid")
+    assert modes == ["neutral"]
+    assert os.environ["oe_sentiment_model"] == "neutral"
+
+
+def test_render_restores_sentiment_setting_after_failure(monkeypatch):
+    monkeypatch.delenv("oe_sentiment_model", raising=False)
+    monkeypatch.setattr(
+        render_module, "fetch_comments",
+        lambda *args, **kwargs: [Comment(text_content="Hello")],
+    )
+
+    def fail(*args, **kwargs):
+        assert os.environ["oe_sentiment_model"] == "hf"
+        raise RuntimeError("render failed")
+
+    monkeypatch.setattr(render_module, "render_comment_list", fail)
+    with pytest.raises(RuntimeError, match="render failed"):
+        render_module.render_teams_link("https://example.invalid")
+    assert "oe_sentiment_model" not in os.environ
 
 
 def test_empty_chat_is_clear_error(monkeypatch):

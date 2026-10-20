@@ -7,21 +7,27 @@ a separate Python 3.10–3.14 package using Microsoft Graph delegated access.
 
 Clone `objectionengine2` and `objectionengine2-teams` next to each other. This
 source checkout uses the adjacent `../objectionengine2` package with uv. Built
-packages depend on the pinned public core Git commit until the core package is
-published:
+packages depend on the pinned core Git commit; publish that commit before
+installing a built Teams package elsewhere:
 
 ```bash
 cd ~/development/objectionengine2-teams
 uv sync --locked
 ```
 
-Install FFmpeg and `ffprobe` for video rendering. Objection Engine downloads
-its asset pack into the current directory's `assets/` folder on first render.
-To reuse the pack from the adjacent core checkout, run from that checkout:
+The standard install includes the core sentiment dependencies. The first
+render downloads the Hugging Face sentiment model.
+
+Install FFmpeg and `ffprobe` for video rendering. Objection Engine saves its
+asset pack and sentiment model under the platformdirs user cache for
+`objectionengine2`. The first render populates the cache. See the cache path
+with `uv run python -c 'from objectionengine2.cache import cache_path; print(cache_path())'`.
+Run from the Teams checkout:
 
 ```bash
-cd ~/development/objectionengine2
-uv run --project ../objectionengine2-teams objectionengine2-teams \
+cd ~/development/objectionengine2-teams
+mkdir -p outputs
+uv run --locked objectionengine2-teams \
   'https://teams.microsoft.com/l/chat/19:example@thread.v2/conversations' \
   -o outputs/teams.mp4
 ```
@@ -34,7 +40,7 @@ starts at the linked message. You can bound the render with another message
 link in the same chat or channel thread:
 
 ```bash
-uv run --project ../objectionengine2-teams --locked objectionengine2-teams \
+uv run --locked objectionengine2-teams \
   '<start message link>' --end-link '<end message link>' -o outputs/teams.mp4
 ```
 
@@ -82,18 +88,17 @@ set). The two sign-in methods share the same cache and account record.
 
 ## Sentiment and objections
 
-Teams messages have no explicit `Comment.score`, so the core renderer treats
-them as neutral by default. Enable its Hugging Face sentiment model with the
-Teams package's optional `sentiment` extra and `oe_sentiment_model=hf`. From the
-adjacent core checkout, where `assets/` is available:
+Teams messages have no explicit `Comment.score`. Teams renders use the core
+Hugging Face sentiment model by default. The normal command is enough:
 
 ```bash
-env -u oe_bypass_sentiment oe_sentiment_model=hf \
-  uv run --project ../objectionengine2-teams --locked --extra sentiment \
-  objectionengine2-teams '<Teams message link>' -o outputs/teams.mp4
+uv run --locked objectionengine2-teams \
+  '<Teams message link>' -o outputs/teams.mp4
 ```
 
-The first run downloads the sentiment model. A strongly negative classification
+Set `oe_sentiment_model=neutral` or `oe_bypass_sentiment=1` to use neutral
+sentiment for a render. An explicit `oe_sentiment_model` value is respected.
+A strongly negative classification
 (confidence above 0.5) has roughly a 70% chance of triggering an objection;
 a strongly positive one has roughly a 30% chance. An objection is therefore
 possible, not guaranteed, for any particular message. If you need to choose
@@ -112,6 +117,7 @@ render_teams_link(start_message_url, "outputs/teams.mp4", end_link=end_message_u
 ```
 
 `fetch_comments` returns `objectionengine2.beans.comment.Comment` objects.
+`render_teams_link` enables Hugging Face sentiment by default for its render.
 Both calls default to browser sign-in. Pass `auth_method="device-code"` to use
 device-code sign-in. Later calls reuse the cached account and token when valid.
 To inspect messages and render without fetching them twice, use the comments
@@ -134,6 +140,6 @@ uv run --locked pytest -q -m asset_integration
 ```
 
 That test calls `objectionengine2.utils.ensure_assets_are_available()` first,
-which downloads the asset pack when necessary. A live Teams render still
+which populates the platform cache when necessary. A live Teams render still
 requires a link, sign-in, and Graph consent; it cannot be validated by the
 offline suite.
