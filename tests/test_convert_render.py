@@ -198,7 +198,7 @@ def test_fetch_comments_connects_link_auth_and_graph(monkeypatch):
     )
     assert [comment.text_content for comment in comments] == ["Objection!"]
     assert auth_calls[0][0] == ("chat",)
-    assert auth_calls[0][1]["auth_method"] == "browser"
+    assert auth_calls[0][1]["auth_method"] == "broker"
 
 
 def test_fetch_comments_passes_device_code_method(monkeypatch):

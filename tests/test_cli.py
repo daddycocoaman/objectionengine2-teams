@@ -13,7 +13,7 @@ def test_end_link_option_reaches_render_api(monkeypatch, tmp_path, capsys):
     assert cli.main(["start-link", "--end-link", "end-link", "-o", str(output)]) == 0
     assert calls[0][0] == ("start-link", str(output))
     assert calls[0][1]["end_link"] == "end-link"
-    assert calls[0][1]["auth_method"] == "browser"
+    assert calls[0][1]["auth_method"] == "broker"
     assert "Saved" in capsys.readouterr().out
 
 

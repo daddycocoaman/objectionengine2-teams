@@ -11,13 +11,16 @@ from azure.identity import (
     AuthenticationRecord,
     DeviceCodeCredential,
     InteractiveBrowserCredential,
+    SharedTokenCacheCredential,
     TokenCachePersistenceOptions,
 )
+from azure.identity.broker import InteractiveBrowserBrokerCredential
+from msal import PublicClientApplication
 
 OFFICE_CLIENT_ID = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 BROWSER_REDIRECT_URI = "http://localhost:8400"
 _SCOPES = {
-    "chat": "https://graph.microsoft.com/Chat.Read",
+    "chat": "https://graph.microsoft.com/Chat.ReadWrite",
     "channel": "https://graph.microsoft.com/ChannelMessage.Read.All",
 }
 
@@ -92,20 +95,22 @@ def acquire_access_token(
     *,
     tenant_id: str | None = None,
     client_id: str = OFFICE_CLIENT_ID,
-    auth_method: str = "browser",
+    auth_method: str = "broker",
     redirect_uri: str = BROWSER_REDIRECT_URI,
     record_dir: str | Path | None = None,
 ) -> str:
     """Return a Graph token, reusing the user's cached account when possible.
 
-    Browser sign-in is the default. Set ``auth_method='device-code'`` for an
-    environment where a local browser cannot be opened. Both methods use the
-    Microsoft Office public client ID unless a different ID is supplied.
+    Broker sign-in is the default. Set ``auth_method='browser'`` or
+    ``auth_method='device-code'`` to use another interactive method. All
+    methods use the Microsoft Office public client ID unless overridden.
     """
     if kind not in _SCOPES:
         raise ValueError("kind must be 'chat' or 'channel'")
-    if auth_method not in ("browser", "device-code"):
-        raise ValueError("auth_method must be 'browser' or 'device-code'")
+    if auth_method not in ("broker", "browser", "device-code", "cache"):
+        raise ValueError(
+            "auth_method must be 'broker', 'browser', 'device-code', or 'cache'"
+        )
 
     tenant = tenant_id or "organizations"
     key = _cache_key(client_id, tenant)
@@ -126,13 +131,21 @@ def acquire_access_token(
     scope = _SCOPES[kind]
     credential = None
     try:
-        if auth_method == "browser":
+        if auth_method == "broker":
+            credential = InteractiveBrowserBrokerCredential(
+                parent_window_handle=PublicClientApplication.CONSOLE_WINDOW_HANDLE,
+                use_default_broker_account=True,
+                **kwargs,
+            )
+        elif auth_method == "cache":
+            credential = SharedTokenCacheCredential(**kwargs)
+        elif auth_method == "browser":
             credential = InteractiveBrowserCredential(
                 redirect_uri=redirect_uri, **kwargs
             )
-        else:
+        elif auth_method == "device-code":
             credential = DeviceCodeCredential(**kwargs)
-        if record is None:
+        if record is None and auth_method in ("browser", "device-code"):
             record = credential.authenticate(scopes=[scope])
             _save_record(record_path, record)
         return credential.get_token(scope).token

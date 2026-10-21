@@ -55,8 +55,9 @@ an attachment-only message becomes a short placeholder.
 ## Sign-in and permissions
 
 The default public client ID is the requested Microsoft Office ID,
-`d3590ed6-52b3-4102-aeff-aad2292ab01c`. Azure Identity opens a browser for
-sign-in by default and requests only the delegated permission needed for the link:
+`d3590ed6-52b3-4102-aeff-aad2292ab01c`. Azure Identity uses
+`InteractiveBrowserBrokerCredential` by default and requests only the delegated
+permission needed for the link:
 
 | Link | Delegated Microsoft Graph permission |
 | --- | --- |
@@ -68,25 +69,34 @@ reject this client or require administrator consent, especially for the channel
 permission. The client ID does not itself guarantee a grant. If the Office
 client cannot obtain the requested scope, register a public client application
 in your tenant with the Graph delegated permission and pass its ID through
-`--client-id`. Browser sign-in uses `http://localhost:8400` as its callback;
-the URI must be registered for the selected client. Use `--redirect-uri` if your
-app registration uses another local callback.
+`--client-id`. Broker sign-in uses the platform's broker redirect URI; on
+Windows and WSL, that is
+`ms-appx-web://Microsoft.AAD.BrokerPlugin/<client-id>`. The application must
+allow that redirect. The `--redirect-uri` option applies only to explicit
+`--auth-method browser` sign-in, whose default callback is
+`http://localhost:8400`.
 
-For WSL, SSH, or another environment where browser sign-in is inconvenient,
-use device-code sign-in:
+On Windows, broker sign-in uses Web Account Manager. On WSL 2.4.13 or newer,
+it can use the Windows broker as well. On other Linux setups it may open a
+browser if a supported broker is unavailable. To select another method, use:
 
 ```bash
+uv run --locked objectionengine2-teams '<Teams message link>' \
+  --auth-method browser -o outputs/teams.mp4
 uv run --locked objectionengine2-teams '<Teams message link>' \
   --auth-method device-code -o outputs/teams.mp4
 ```
 
 Azure Identity persists tokens in a per-user cache and reuses them on later
-runs. It encrypts the cache when the platform supports it; on platforms without
+runs. Broker sign-in first tries the default broker account silently and then
+offers interactive sign-in if needed. Use `--auth-method cache` to read an
+already cached token without an interactive fallback. Azure Identity encrypts
+the persistent cache when the platform supports it; on platforms without
 user-data encryption (including some WSL installations), it may store tokens
-unencrypted. Keep your user profile private. A separate non-secret account
-record is saved under the user state directory
+unencrypted. Keep your user profile private. Browser and device-code sign-in
+also save a separate non-secret account record under the user state directory
 (`~/.local/state/objectionengine2-teams/` on Linux unless `XDG_STATE_HOME` is
-set). The two sign-in methods share the same cache and account record.
+set). The methods use the same named persistent token cache.
 
 ## Sentiment and objections
 
@@ -120,8 +130,9 @@ render_teams_link(start_message_url, "outputs/teams.mp4", end_link=end_message_u
 
 `fetch_comments` returns `objectionengine2.beans.comment.Comment` objects.
 `render_teams_link` enables Hugging Face sentiment by default for its render.
-Both calls default to browser sign-in. Pass `auth_method="device-code"` to use
-device-code sign-in. Later calls reuse the cached account and token when valid.
+Both calls default to broker sign-in. Pass `auth_method="browser"`,
+`auth_method="device-code"`, or `auth_method="cache"` to select another
+method. Later calls reuse cached tokens when valid.
 To inspect messages and render without fetching them twice, use the comments
 with `objectionengine2.renderer.render_comment_list` directly.
 

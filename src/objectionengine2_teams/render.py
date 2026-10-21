@@ -52,7 +52,7 @@ def fetch_comments(
     end_link: str | None = None,
     max_messages: int | None = None,
     client_id: str = OFFICE_CLIENT_ID,
-    auth_method: str = "browser",
+    auth_method: str = "broker",
     redirect_uri: str = BROWSER_REDIRECT_URI,
 ) -> list[Comment]:
     """Read a Teams conversation from the linked message through an optional end."""
@@ -87,7 +87,7 @@ def render_teams_link(
     end_link: str | None = None,
     max_messages: int | None = None,
     client_id: str = OFFICE_CLIENT_ID,
-    auth_method: str = "browser",
+    auth_method: str = "broker",
     redirect_uri: str = BROWSER_REDIRECT_URI,
     music_code: str = "pwr",
     resolution_scale: float = 1,
