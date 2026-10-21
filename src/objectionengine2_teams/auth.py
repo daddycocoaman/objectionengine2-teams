@@ -33,12 +33,16 @@ def _state_dir() -> Path:
     elif sys.platform == "darwin":
         root = Path.home() / "Library" / "Application Support"
     else:
-        root = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+        root = Path(
+            os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+        )
     return root / "objectionengine2-teams"
 
 
 def _cache_key(client_id: str, tenant_id: str) -> str:
-    return hashlib.sha256(f"{client_id.lower()}\0{tenant_id.lower()}".encode()).hexdigest()[:24]
+    return hashlib.sha256(
+        f"{client_id.lower()}\0{tenant_id.lower()}".encode()
+    ).hexdigest()[:24]
 
 
 def _load_record(path: Path, client_id: str) -> AuthenticationRecord | None:
@@ -47,7 +51,9 @@ def _load_record(path: Path, client_id: str) -> AuthenticationRecord | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise AuthenticationError(f"Could not read the cached account record at {path}: {exc}") from exc
+        raise AuthenticationError(
+            f"Could not read the cached account record at {path}: {exc}"
+        ) from exc
     try:
         record = AuthenticationRecord.deserialize(serialized)
     except (TypeError, ValueError, KeyError) as exc:
@@ -63,13 +69,19 @@ def _save_record(path: Path, record: AuthenticationRecord) -> None:
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent, prefix=".account-", delete=False
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=".account-",
+            delete=False,
         ) as temporary:
             temporary_path = Path(temporary.name)
             temporary.write(record.serialize())
         os.replace(temporary_path, path)
     except OSError as exc:
-        raise AuthenticationError(f"Could not save the cached account record at {path}: {exc}") from exc
+        raise AuthenticationError(
+            f"Could not save the cached account record at {path}: {exc}"
+        ) from exc
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -97,7 +109,9 @@ def acquire_access_token(
 
     tenant = tenant_id or "organizations"
     key = _cache_key(client_id, tenant)
-    record_path = (Path(record_dir) if record_dir is not None else _state_dir()) / f"{key}.json"
+    record_path = (
+        Path(record_dir) if record_dir is not None else _state_dir()
+    ) / f"{key}.json"
     record = _load_record(record_path, client_id)
     options = TokenCachePersistenceOptions(
         name=f"objectionengine2-teams-{key}", allow_unencrypted_storage=True
@@ -113,7 +127,9 @@ def acquire_access_token(
     credential = None
     try:
         if auth_method == "browser":
-            credential = InteractiveBrowserCredential(redirect_uri=redirect_uri, **kwargs)
+            credential = InteractiveBrowserCredential(
+                redirect_uri=redirect_uri, **kwargs
+            )
         else:
             credential = DeviceCodeCredential(**kwargs)
         if record is None:
