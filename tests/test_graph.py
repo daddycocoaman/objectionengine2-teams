@@ -1,4 +1,7 @@
+from io import BytesIO
+
 import pytest
+from PIL import Image
 
 from objectionengine2_teams.graph import GraphClient, GraphError
 from objectionengine2_teams.links import TeamsTarget
@@ -22,6 +25,35 @@ class FakeSession:
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
         return self.responses.pop(0)
+
+
+def test_download_hosted_image_caches_png_and_rejects_external_urls(monkeypatch, tmp_path):
+    from objectionengine2_teams import graph as graph_module
+
+    content = BytesIO()
+    Image.new("RGB", (2, 2), "red").save(content, format="JPEG")
+
+    class ImageResponse(FakeResponse):
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, _size):
+            yield content.getvalue()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(graph_module, "user_cache_path", lambda *args, **kwargs: tmp_path)
+    session = FakeSession([ImageResponse(None)])
+    client = GraphClient("secret", session=session)
+    assert client.download_image("https://example.com/v1.0/hostedContents/id/$value") is None
+    path = client.download_image("https://graph.microsoft.com/v1.0/chats/a/messages/b/hostedContents/c/$value")
+    assert path is not None
+    with Image.open(path) as image:
+        assert image.format == "PNG"
+        assert image.size == (2, 2)
+    assert len(session.calls) == 1
+    assert session.calls[0][1]["allow_redirects"] is False
 
 
 def test_chat_pagination_and_token_header():

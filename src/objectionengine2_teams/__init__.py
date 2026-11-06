@@ -1,5 +1,12 @@
 """Use Microsoft Graph messages as objectionengine2 dialogue."""
 
+import warnings
+
+# pydub emits SyntaxWarnings while its modules are compiled on newer Python.
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=SyntaxWarning, module=r"^pydub(?:\.|$)")
+    import pydub  # noqa: F401
+
 from .auth import OFFICE_CLIENT_ID, AuthenticationError, acquire_access_token
 from .convert import messages_to_comments
 from .graph import GraphClient, GraphError

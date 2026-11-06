@@ -2,7 +2,7 @@
 
 from html.parser import HTMLParser
 import re
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from objectionengine2.beans.comment import Comment
 
@@ -14,6 +14,7 @@ class _TeamsHTMLParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.hidden_depth = 0
+        self.images: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style"}:
@@ -21,8 +22,11 @@ class _TeamsHTMLParser(HTMLParser):
         elif self.hidden_depth == 0 and tag in self._BREAKS:
             self.parts.append("\n")
         elif self.hidden_depth == 0 and tag == "img":
-            alt = dict(attrs).get("alt")
-            if alt:
+            attributes = dict(attrs)
+            if attributes.get("src"):
+                self.images.append(attributes["src"])
+            alt = attributes.get("alt")
+            if alt and alt.strip().casefold() != "image":
                 self.parts.append(alt)
 
     def handle_endtag(self, tag: str) -> None:
@@ -79,6 +83,7 @@ def messages_to_comments(
     start_message_id: str | None = None,
     end_message_id: str | None = None,
     max_messages: int | None = None,
+    image_resolver: Callable[[str], str | None] | None = None,
 ) -> list[Comment]:
     """Convert an inclusive message range to chronological dialogue."""
     if max_messages is not None and max_messages < 1:
@@ -105,15 +110,25 @@ def messages_to_comments(
     if end < start:
         raise ValueError("The end message occurs before the start message")
 
-    comments: list[Comment] = []
+    selected: list[tuple[dict[str, Any], str]] = []
     for message in ordered[start : end + 1]:
         if message.get("messageType", "message") != "message" or message.get("deletedDateTime"):
             continue
         text = _message_text(message)
-        if not text:
+        body = message.get("body") or {}
+        parser = _TeamsHTMLParser()
+        if isinstance(body, dict) and str(body.get("contentType", "")).lower() == "html" and isinstance(body.get("content"), str):
+            parser.feed(body["content"])
+        image_url = parser.images[0] if parser.images else ""
+        if not text and not image_url:
             continue
-        user_id, user_name = _speaker(message)
-        comments.append(Comment(user_id=user_id, user_name=user_name, text_content=text))
+        selected.append((message, image_url))
     if max_messages is not None:
-        comments = comments[:max_messages] if start_message_id else comments[-max_messages:]
+        selected = selected[:max_messages] if start_message_id else selected[-max_messages:]
+    comments: list[Comment] = []
+    for message, image_url in selected:
+        text = _message_text(message) or "Shared an image"
+        user_id, user_name = _speaker(message)
+        evidence = image_resolver(image_url) if image_url and image_resolver else None
+        comments.append(Comment(user_id=user_id, user_name=user_name, text_content=text, evidence_path=evidence))
     return comments

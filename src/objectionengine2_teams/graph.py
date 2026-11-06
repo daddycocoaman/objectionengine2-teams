@@ -2,12 +2,17 @@
 
 from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
+from hashlib import sha256
+from io import BytesIO
+from pathlib import Path
 from email.utils import parsedate_to_datetime
 from time import sleep
 from typing import Any
 from urllib.parse import quote, urlsplit
 
 import requests
+from PIL import Image, UnidentifiedImageError
+from platformdirs import user_cache_path
 
 from .links import TeamsTarget
 
@@ -107,6 +112,39 @@ class GraphClient:
                 raise GraphError("Microsoft Graph returned an unexpected response")
             return data
         raise AssertionError("unreachable")
+
+    def download_image(self, url: str) -> str | None:
+        """Cache a Graph-hosted image for use as renderer evidence."""
+        try:
+            self._validate_url(url)
+            parsed = urlsplit(url)
+            if "/hostedContents/" not in parsed.path or not parsed.path.endswith("/$value"):
+                return None
+            response = self._session.get(
+                url, headers={**self._headers, "Accept": "image/*"},
+                timeout=30, allow_redirects=False, stream=True,
+            )
+            try:
+                response.raise_for_status()
+                if not 200 <= response.status_code < 300:
+                    return None
+                data = bytearray()
+                for chunk in response.iter_content(65536):
+                    data.extend(chunk)
+                    if len(data) > 20 * 1024 * 1024:
+                        return None
+                with Image.open(BytesIO(data)) as image:
+                    image.load()
+                    image = image.convert("RGBA")
+                directory = user_cache_path("objectionengine2-teams", appauthor=False) / "images"
+                directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+                path = directory / f"{sha256(url.encode()).hexdigest()}.png"
+                image.save(path, format="PNG")
+                return str(path)
+            finally:
+                response.close()
+        except (GraphError, requests.RequestException, OSError, ValueError, UnidentifiedImageError):
+            return None
 
     def _pages(self, url: str, scope: str) -> Iterator[dict[str, Any]]:
         seen: set[str] = set()

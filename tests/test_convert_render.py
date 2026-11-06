@@ -41,6 +41,22 @@ def test_attachment_only_message_uses_placeholder():
     assert messages_to_comments([message])[0].text_content == "Shared an attachment: chart.png"
 
 
+def test_inline_image_is_passed_to_evidence_and_image_only_message_is_kept():
+    message = _message("1", "2026-01-01T00:00:00Z", '<img src="https://graph.microsoft.com/v1.0/chats/a/messages/b/hostedContents/c/$value">')
+    seen = []
+    comments = messages_to_comments([message], image_resolver=lambda url: seen.append(url) or "/tmp/evidence.png")
+    assert comments[0].text_content == "Shared an image"
+    assert comments[0].evidence_path == "/tmp/evidence.png"
+    assert seen == ["https://graph.microsoft.com/v1.0/chats/a/messages/b/hostedContents/c/$value"]
+
+
+def test_generic_image_alt_text_is_not_added_to_dialogue():
+    message = _message("1", "2026-01-01T00:00:00Z", '<p>Look <img src="https://graph.microsoft.com/v1.0/chats/a/messages/b/hostedContents/c/$value" alt="image"> here</p>')
+    comment = messages_to_comments([message], image_resolver=lambda _: "/tmp/evidence.png")[0]
+    assert comment.text_content == "Look here"
+    assert comment.evidence_path == "/tmp/evidence.png"
+
+
 def test_thread_title_is_included_with_root_message_and_respects_range():
     root = _message(
         "100", "2026-01-01T00:00:00Z", "<p>Body &amp; details</p>",
