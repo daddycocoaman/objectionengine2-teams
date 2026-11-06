@@ -22,6 +22,7 @@ BROWSER_REDIRECT_URI = "http://localhost:8400"
 _SCOPES = {
     "chat": "https://graph.microsoft.com/Chat.ReadWrite",
     "channel": "https://graph.microsoft.com/ChannelMessage.Read.All",
+    "files": "https://graph.microsoft.com/Files.Read",
 }
 
 
@@ -106,7 +107,7 @@ def acquire_access_token(
     methods use the Microsoft Office public client ID unless overridden.
     """
     if kind not in _SCOPES:
-        raise ValueError("kind must be 'chat' or 'channel'")
+        raise ValueError("kind must be 'chat', 'channel', or 'files'")
     if auth_method not in ("broker", "browser", "device-code", "cache"):
         raise ValueError(
             "auth_method must be 'broker', 'browser', 'device-code', or 'cache'"

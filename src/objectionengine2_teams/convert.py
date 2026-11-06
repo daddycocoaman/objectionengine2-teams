@@ -4,8 +4,18 @@ from html.parser import HTMLParser
 import re
 import unicodedata
 from typing import Any, Callable, Iterable
+from urllib.parse import urlsplit
 
 from objectionengine2.beans.comment import Comment
+from .graph import is_sharepoint_url
+
+
+def _is_image_link(url: str) -> bool:
+    if not is_sharepoint_url(url):
+        return False
+    parsed = urlsplit(url)
+    return (parsed.path.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"))
+            or "/:i:/" in parsed.path.lower() or "teamscid=" in parsed.query.lower())
 
 
 class _TeamsHTMLParser(HTMLParser):
@@ -29,6 +39,10 @@ class _TeamsHTMLParser(HTMLParser):
             alt = attributes.get("alt")
             if alt and alt.strip().casefold() != "image":
                 self.parts.append(alt)
+        elif self.hidden_depth == 0 and tag == "a":
+            href = dict(attrs).get("href")
+            if href and _is_image_link(href):
+                self.images.append(href)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style"} and self.hidden_depth:
@@ -121,6 +135,16 @@ def messages_to_comments(
         if isinstance(body, dict) and str(body.get("contentType", "")).lower() == "html" and isinstance(body.get("content"), str):
             parser.feed(body["content"])
         image_url = parser.images[0] if parser.images else ""
+        if not image_url:
+            for attachment in message.get("attachments") or []:
+                if isinstance(attachment, dict):
+                    url = attachment.get("contentUrl")
+                    name = attachment.get("name")
+                    if isinstance(url, str) and is_sharepoint_url(url) and (
+                        _is_image_link(url) or isinstance(name, str) and name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"))
+                    ):
+                        image_url = url
+                        break
         if not text and not image_url:
             continue
         selected.append((message, image_url))

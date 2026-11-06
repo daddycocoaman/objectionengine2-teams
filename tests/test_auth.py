@@ -79,6 +79,7 @@ def fake_credentials(monkeypatch):
     "kind,scope", [
         ("chat", "https://graph.microsoft.com/Chat.ReadWrite"),
         ("channel", "https://graph.microsoft.com/ChannelMessage.Read.All"),
+        ("files", "https://graph.microsoft.com/Files.Read"),
     ]
 )
 def test_broker_is_default_with_office_client_and_configured_scope(kind, scope, tmp_path):

@@ -1,4 +1,5 @@
 from io import BytesIO
+import base64
 
 import pytest
 from PIL import Image
@@ -54,6 +55,51 @@ def test_download_hosted_image_caches_png_and_rejects_external_urls(monkeypatch,
         assert image.size == (2, 2)
     assert len(session.calls) == 1
     assert session.calls[0][1]["allow_redirects"] is False
+
+
+def test_sharepoint_image_uses_graph_token_only_for_graph(monkeypatch, tmp_path):
+    from objectionengine2_teams import graph as graph_module
+
+    content = BytesIO()
+    Image.new("RGB", (2, 2), "blue").save(content, format="PNG")
+
+    class Response(FakeResponse):
+        def close(self):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+        def iter_content(self, _size):
+            yield content.getvalue()
+
+    monkeypatch.setattr(graph_module, "user_cache_path", lambda *args, **kwargs: tmp_path)
+    session = FakeSession([
+        Response(None, status=302, headers={"Location": "https://tenant.sharepoint.com/download?token=secret"}),
+        Response(None),
+    ])
+    client = GraphClient("graph-token", session=session)
+    share = "https://tenant.sharepoint.com/:i:/r/sites/team/image.png?TeamsCID=abc"
+    path = client.download_sharepoint_image(share)
+    encoded = "u!" + base64.urlsafe_b64encode(share.encode()).decode().rstrip("=")
+    assert session.calls[0][0].endswith(f"/shares/{encoded}/driveItem/content")
+    assert session.calls[0][1]["headers"]["Authorization"] == "Bearer graph-token"
+    assert "Authorization" not in session.calls[1][1]["headers"]
+    assert session.calls[1][1]["allow_redirects"] is False
+    with Image.open(path) as image:
+        assert image.size == (2, 2)
+
+
+def test_sharepoint_image_rejects_unsafe_download_redirect():
+    class Response(FakeResponse):
+        def close(self):
+            pass
+
+    session = FakeSession([Response(None, status=302, headers={"Location": "https://evil.example/file"})])
+    client = GraphClient("secret", session=session)
+    with pytest.raises(GraphError, match="unsupported SharePoint download host"):
+        client.download_sharepoint_image("https://tenant.sharepoint.com/image.png")
+    assert len(session.calls) == 1
 
 
 def test_chat_pagination_and_token_header():

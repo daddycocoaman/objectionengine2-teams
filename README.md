@@ -50,7 +50,10 @@ link. The CLI sorts them by creation time, skips empty messages, and excludes
 thread titles from dialogue. Rich
 reactions, deleted messages, and system events are not represented. The first
 inline image in each message is displayed as evidence when Microsoft Graph
-provides it as hosted content. Other attachments become a short placeholder
+provides it as hosted content. SharePoint image links and image attachments are
+also supported when Graph can resolve their sharing URL and the signed-in user
+can access the file. Resolving one requests the delegated `Files.Read` permission,
+which may require additional consent. Other attachments become a short placeholder
 when there is no message text. Images are cached in the user cache for
 `objectionengine2-teams`; remove its `images` directory to delete them. Images
 that cannot be downloaded are omitted.

@@ -4,7 +4,7 @@ import warnings
 
 # pydub emits SyntaxWarnings while its modules are compiled on newer Python.
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=SyntaxWarning, module=r"^pydub(?:\.|$)")
+    warnings.simplefilter("ignore", SyntaxWarning)
     import pydub  # noqa: F401
 
 from .auth import OFFICE_CLIENT_ID, AuthenticationError, acquire_access_token

@@ -1,16 +1,17 @@
 """Public Teams-to-video API."""
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import json
 import os
+import warnings
 from pathlib import Path
 
 from objectionengine2.beans.comment import Comment
 from objectionengine2.renderer import render_comment_list
 
-from .auth import BROWSER_REDIRECT_URI, OFFICE_CLIENT_ID, acquire_access_token
+from .auth import BROWSER_REDIRECT_URI, OFFICE_CLIENT_ID, AuthenticationError, acquire_access_token
 from .convert import messages_to_comments
-from .graph import GraphClient
+from .graph import GraphClient, GraphError, is_sharepoint_url
 from .links import TeamsTarget, parse_teams_link
 
 
@@ -67,7 +68,31 @@ def fetch_comments(
         auth_method=auth_method,
         redirect_uri=redirect_uri,
     )
-    with GraphClient(token) as graph:
+    with ExitStack() as stack:
+        graph = stack.enter_context(GraphClient(token))
+        file_graph = None
+        file_access_failed = False
+
+        def resolve_image(url: str) -> str | None:
+            nonlocal file_graph, file_access_failed
+            if not is_sharepoint_url(url):
+                return graph.download_image(url)
+            if file_access_failed:
+                return None
+            try:
+                if file_graph is None:
+                    file_token = acquire_access_token(
+                        "files", tenant_id=tenant_id, client_id=client_id,
+                        auth_method=auth_method, redirect_uri=redirect_uri,
+                    )
+                    file_graph = stack.enter_context(GraphClient(file_token))
+                return file_graph.download_sharepoint_image(url)
+            except (AuthenticationError, GraphError) as exc:
+                warnings.warn(f"SharePoint image was omitted: {exc}", UserWarning)
+                if file_graph is None:
+                    file_access_failed = True
+                return None
+
         messages = (
             graph.iter_messages(target, end_message_id=end.start_message_id)
             if end else graph.iter_messages(target)
@@ -77,7 +102,7 @@ def fetch_comments(
             start_message_id=target.start_message_id,
             end_message_id=end.start_message_id if end else None,
             max_messages=max_messages,
-            image_resolver=lambda url: graph.download_image(url),
+            image_resolver=resolve_image,
         )
     return comments
 

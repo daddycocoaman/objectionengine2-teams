@@ -1,4 +1,25 @@
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+import pydub
 from objectionengine2_teams import cli
+
+
+def test_pydub_compile_warnings_are_suppressed_only_during_import(tmp_path):
+    shutil.copytree(
+        Path(pydub.__file__).parent, tmp_path / "pydub",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    env = dict(os.environ, PYTHONPATH=str(tmp_path))
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", 'import warnings; warnings.simplefilter("always", SyntaxWarning); import objectionengine2_teams; warnings.warn("other warning", SyntaxWarning)'],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    assert "pydub/utils.py" not in result.stderr.replace("\\", "/")
+    assert "other warning" in result.stderr
 
 
 def test_end_link_option_reaches_render_api(monkeypatch, tmp_path, capsys):

@@ -58,6 +58,46 @@ def test_generic_image_alt_text_is_not_added_to_dialogue():
     assert comment.evidence_path == "/tmp/evidence.png"
 
 
+def test_sharepoint_image_links_and_attachments_are_selected():
+    url = "https://tenant.sharepoint.com/:i:/r/sites/team/photo?TeamsCID=abc"
+    linked = _message("1", "2026-01-01T00:00:00Z", f'<p>See <a href="{url}">this photo</a></p>')
+    attached = _message("2", "2026-01-02T00:00:00Z", "", attachments=[{"name": "photo.jpg", "contentUrl": "https://tenant.sharepoint.com/file"}])
+    seen = []
+    comments = messages_to_comments([linked, attached], image_resolver=lambda image_url: seen.append(image_url) or "/tmp/evidence.png")
+    assert seen == [url, "https://tenant.sharepoint.com/file"]
+    assert all(comment.evidence_path == "/tmp/evidence.png" for comment in comments)
+
+
+def test_fetch_comments_lazily_authenticates_for_sharepoint_images(monkeypatch):
+    link = "https://teams.microsoft.com/l/chat/19:abc@thread.v2/conversations"
+    image_url = "https://tenant.sharepoint.com/:i:/r/sites/team/photo?TeamsCID=abc"
+    auth_calls = []
+    monkeypatch.setattr(render_module, "acquire_access_token", lambda kind, **kwargs: auth_calls.append(kind) or kind + "-token")
+
+    class FakeGraph:
+        def __init__(self, token):
+            self.token = token
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def iter_messages(self, target):
+            return iter([_message("1", "2026-01-01T00:00:00Z", f'<p>See <a href="{image_url}">photo</a></p>')])
+
+        def download_sharepoint_image(self, url):
+            assert self.token == "files-token"
+            assert url == image_url
+            return "/tmp/evidence.png"
+
+    monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
+    comments = render_module.fetch_comments(link)
+    assert auth_calls == ["chat", "files"]
+    assert comments[0].evidence_path == "/tmp/evidence.png"
+
+
 def test_thread_title_is_excluded_and_range_is_respected():
     root = _message(
         "100", "2026-01-01T00:00:00Z", "<p>Body &amp; details</p>",

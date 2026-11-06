@@ -1,6 +1,7 @@
 """Small Microsoft Graph client for Teams message collections."""
 
 from collections.abc import Callable, Iterator
+import base64
 from datetime import datetime, timezone
 from hashlib import sha256
 from io import BytesIO
@@ -18,6 +19,17 @@ from .links import TeamsTarget
 
 
 _GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
+
+
+def is_sharepoint_url(url: str) -> bool:
+    try:
+        parsed = urlsplit(url)
+        return (parsed.scheme == "https" and parsed.hostname is not None
+                and parsed.hostname.endswith(".sharepoint.com")
+                and parsed.username is None and parsed.password is None
+                and parsed.port is None)
+    except ValueError:
+        return False
 
 
 class GraphError(RuntimeError):
@@ -145,6 +157,48 @@ class GraphClient:
                 response.close()
         except (GraphError, requests.RequestException, OSError, ValueError, UnidentifiedImageError):
             return None
+
+    def download_sharepoint_image(self, url: str) -> str | None:
+        """Resolve a SharePoint sharing URL with Graph, then fetch its image bytes."""
+        if not is_sharepoint_url(url):
+            return None
+        token = "u!" + base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+        endpoint = f"{_GRAPH_ROOT}/shares/{token}/driveItem/content"
+        try:
+            response = self._session.get(endpoint, headers=self._headers, timeout=30, allow_redirects=False)
+            try:
+                if response.status_code != 302:
+                    raise GraphError(f"Could not access SharePoint image (Graph HTTP {response.status_code}); Files.Read consent and file access may be required")
+                location = response.headers.get("Location", "")
+            finally:
+                response.close()
+            parsed = urlsplit(location)
+            host = parsed.hostname or ""
+            if (parsed.scheme != "https" or parsed.username is not None or parsed.password is not None
+                or parsed.port is not None or not any(host.endswith("." + suffix) for suffix in ("sharepoint.com", "1drv.com", "onedrive.com"))):
+                raise GraphError("Graph returned an unsupported SharePoint download host")
+            response = self._session.get(location, headers={"Accept": "image/*"}, timeout=30, allow_redirects=False, stream=True)
+            try:
+                response.raise_for_status()
+                if not 200 <= response.status_code < 300:
+                    raise GraphError(f"SharePoint image download failed (HTTP {response.status_code})")
+                data = bytearray()
+                for chunk in response.iter_content(65536):
+                    data.extend(chunk)
+                    if len(data) > 20 * 1024 * 1024:
+                        raise GraphError("SharePoint image exceeds the 20 MiB limit")
+                with Image.open(BytesIO(data)) as image:
+                    image.load()
+                    image = image.convert("RGBA")
+                directory = user_cache_path("objectionengine2-teams", appauthor=False) / "images"
+                directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+                path = directory / f"{sha256(url.encode()).hexdigest()}.png"
+                image.save(path, format="PNG")
+                return str(path)
+            finally:
+                response.close()
+        except (requests.RequestException, OSError, ValueError, UnidentifiedImageError) as exc:
+            raise GraphError("Could not download or decode SharePoint image") from exc
 
     def _pages(self, url: str, scope: str) -> Iterator[dict[str, Any]]:
         seen: set[str] = set()
