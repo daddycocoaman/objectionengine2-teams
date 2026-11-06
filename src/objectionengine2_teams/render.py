@@ -76,6 +76,7 @@ def fetch_comments(
             start_message_id=target.start_message_id,
             end_message_id=end.start_message_id if end else None,
             max_messages=max_messages,
+            image_resolver=lambda url: graph.download_image(url),
         )
     return comments
 

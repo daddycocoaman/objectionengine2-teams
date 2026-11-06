@@ -9,7 +9,7 @@ Install Python 3.10–3.14, uv, FFmpeg and `ffprobe`, then install the command
 from PyPI:
 
 ```bash
-uv tool install objectionengine2-teams
+uv tool install --torch-backend cpu objectionengine2-teams
 ```
 
 The install includes `objectionengine2` and its sentiment dependencies. The
@@ -18,7 +18,7 @@ first render downloads the Hugging Face sentiment model.
 Objection Engine saves its
 asset pack and sentiment model under the platformdirs user cache for
 `objectionengine2`. The first render populates the cache. See the cache path
-with `uv run --no-project --with objectionengine2-teams python -c 'from objectionengine2.cache import cache_path; print(cache_path())'`.
+with `uv run --no-project --torch-backend cpu --with objectionengine2-teams python -c 'from objectionengine2.cache import cache_path; print(cache_path())'`.
 Run the installed command:
 
 ```bash
@@ -45,8 +45,12 @@ messages after a start link, or the newest 20 for an unbounded chat/channel
 link. The CLI sorts them by creation time. When a channel thread's first
 message has a title, it appears before that message's body in its comment.
 Starting from a later reply excludes the first message and its title. Rich
-attachments, reactions, deleted messages, and system events are not represented;
-an attachment-only message becomes a short placeholder.
+reactions, deleted messages, and system events are not represented. The first
+inline image in each message is displayed as evidence when Microsoft Graph
+provides it as hosted content. Other attachments become a short placeholder
+when there is no message text. Images are cached in the user cache for
+`objectionengine2-teams`; remove its `images` directory to delete them. Images
+that cannot be downloaded are omitted.
 
 ## Sign-in and permissions
 
