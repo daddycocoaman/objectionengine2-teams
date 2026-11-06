@@ -5,10 +5,8 @@ a separate Python 3.10–3.14 package using Microsoft Graph delegated access.
 
 ## Install
 
-Clone `objectionengine2` and `objectionengine2-teams` next to each other. This
-source checkout uses the adjacent `../objectionengine2` package with uv. Built
-packages depend on the pinned core Git commit; publish that commit before
-installing a built Teams package elsewhere:
+Clone `objectionengine2-teams` and install its dependencies with uv. The core
+`objectionengine2` package is installed from PyPI:
 
 ```bash
 cd ~/development/objectionengine2-teams

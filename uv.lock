@@ -1507,8 +1507,8 @@ wheels = [
 
 [[package]]
 name = "objectionengine2"
-version = "3.5.1"
-source = { editable = "../objectionengine2" }
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "audioop-lts", marker = "python_full_version >= '3.13'" },
     { name = "ffmpeg-python" },
@@ -1527,6 +1527,10 @@ dependencies = [
     { name = "spacy" },
     { name = "toml" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/1a/bb/4e3cba5ca1c80d94c46f72e688c4a151bb0d1299a44cfe0bd735873be2e4/objectionengine2-1.0.0.tar.gz", hash = "sha256:308bc3d0984341c41da8f65a439ef83b93b738427013815c53da574d2b4e6462", size = 35425, upload-time = "2026-11-06T17:02:20.396Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/84/3207965a04759d2d0fc0956d1bb01c8f2f574eb176be966daaf32fd7c72f/objectionengine2-1.0.0-py3-none-any.whl", hash = "sha256:4d544d9117e4342f5dba8e0439d9c7efdc7bc40656cf78e68e16cb372c9a07b3", size = 42458, upload-time = "2026-11-06T17:02:19.228Z" },
+]
 
 [package.optional-dependencies]
 sentiment = [
@@ -1537,33 +1541,9 @@ sentiment = [
     { name = "transformers" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "audioop-lts", marker = "python_full_version >= '3.13'", specifier = ">=0.2.2,<0.3" },
-    { name = "ffmpeg-python", specifier = ">=0.2,<0.3" },
-    { name = "fonttools", specifier = ">=4.60,<5" },
-    { name = "numpy", specifier = ">=2.2,<3" },
-    { name = "opencv-python-headless", specifier = ">=4.14,<5" },
-    { name = "pillow", specifier = ">=10.4,<13" },
-    { name = "platformdirs", specifier = ">=4.4,<5" },
-    { name = "protobuf", marker = "extra == 'sentiment'", specifier = ">=5,<7" },
-    { name = "pydub", specifier = ">=0.25.1,<0.26" },
-    { name = "requests", specifier = ">=2.32,<3" },
-    { name = "rich", specifier = ">=14,<16" },
-    { name = "sentencepiece", marker = "extra == 'sentiment'", specifier = ">=0.2,<0.3" },
-    { name = "spacy", specifier = ">=3.8.16,<3.9" },
-    { name = "toml", specifier = ">=0.10.2,<0.11" },
-    { name = "torch", marker = "extra == 'sentiment'", specifier = ">=2.8,<3" },
-    { name = "transformers", marker = "extra == 'sentiment'", specifier = ">=4.55,<6" },
-]
-provides-extras = ["sentiment"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.4,<10" }]
-
 [[package]]
 name = "objectionengine2-teams"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "azure-identity" },
@@ -1590,8 +1570,8 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.25,<2" },
     { name = "azure-identity-broker", specifier = ">=1.3.0" },
     { name = "msal", specifier = ">=1.30,<2" },
-    { name = "objectionengine2", extras = ["sentiment"], editable = "../objectionengine2" },
-    { name = "objectionengine2", extras = ["sentiment"], marker = "extra == 'sentiment'", editable = "../objectionengine2" },
+    { name = "objectionengine2", extras = ["sentiment"], specifier = ">=1.0.0,<2" },
+    { name = "objectionengine2", extras = ["sentiment"], marker = "extra == 'sentiment'" },
     { name = "requests", specifier = ">=2.32,<3" },
     { name = "torch", marker = "sys_platform != 'linux' and sys_platform != 'win32'", specifier = ">=2.8,<3" },
     { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = ">=2.8,<3", index = "https://download.pytorch.org/whl/cpu" },

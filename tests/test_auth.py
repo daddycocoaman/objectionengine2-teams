@@ -77,11 +77,11 @@ def fake_credentials(monkeypatch):
 
 @pytest.mark.parametrize(
     "kind,scope", [
-        ("chat", "https://graph.microsoft.com/Chat.Read"),
+        ("chat", "https://graph.microsoft.com/Chat.ReadWrite"),
         ("channel", "https://graph.microsoft.com/ChannelMessage.Read.All"),
     ]
 )
-def test_broker_is_default_with_office_client_and_least_scope(kind, scope, tmp_path):
+def test_broker_is_default_with_office_client_and_configured_scope(kind, scope, tmp_path):
     token = auth.acquire_access_token(
         kind,
         tenant_id="aaaabbbb-0000-cccc-1111-dddd2222eeee",
@@ -108,7 +108,7 @@ def test_browser_sign_in_saves_account_record(tmp_path):
     auth.acquire_access_token("chat", auth_method="browser", record_dir=tmp_path)
     credential = FakeBrowserCredential.instances[0]
     assert credential.kwargs["redirect_uri"] == auth.BROWSER_REDIRECT_URI
-    assert credential.auth_scopes == ["https://graph.microsoft.com/Chat.Read"]
+    assert credential.auth_scopes == ["https://graph.microsoft.com/Chat.ReadWrite"]
     records = list(tmp_path.glob("*.json"))
     assert len(records) == 1
     assert stat.S_IMODE(records[0].stat().st_mode) == 0o600
@@ -125,7 +125,7 @@ def test_device_code_uses_same_cache_and_saved_account(tmp_path):
     assert device.kwargs["authentication_record"].username == "test@example.com"
     assert device.kwargs["cache_persistence_options"].name == browser.kwargs["cache_persistence_options"].name
     assert device.auth_scopes is None
-    assert device.token_scopes == ("https://graph.microsoft.com/Chat.Read",)
+    assert device.token_scopes == ("https://graph.microsoft.com/Chat.ReadWrite",)
     assert device.closed
 
 
@@ -163,7 +163,7 @@ def test_authentication_failure_has_consent_guidance(tmp_path):
 
 def test_cache_only_sign_in_does_not_prompt_or_write_record(tmp_path):
     assert auth.acquire_access_token("chat", auth_method="cache", record_dir=tmp_path) == "example-token"
-    assert FakeCacheCredential.instances[0].token_scopes == ("https://graph.microsoft.com/Chat.Read",)
+    assert FakeCacheCredential.instances[0].token_scopes == ("https://graph.microsoft.com/Chat.ReadWrite",)
     assert FakeCacheCredential.instances[0].closed
     assert not list(tmp_path.glob("*.json"))
 
