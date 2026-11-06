@@ -5,27 +5,25 @@ a separate Python 3.10–3.14 package using Microsoft Graph delegated access.
 
 ## Install
 
-Clone `objectionengine2-teams` and install its dependencies with uv. The core
-`objectionengine2` package is installed from PyPI:
+Install Python 3.10–3.14, uv, FFmpeg and `ffprobe`, then install the command
+from PyPI:
 
 ```bash
-cd ~/development/objectionengine2-teams
-uv sync --locked
+uv tool install objectionengine2-teams
 ```
 
-The standard install includes the core sentiment dependencies. The first
-render downloads the Hugging Face sentiment model.
+The install includes `objectionengine2` and its sentiment dependencies. The
+first render downloads the Hugging Face sentiment model.
 
-Install FFmpeg and `ffprobe` for video rendering. Objection Engine saves its
+Objection Engine saves its
 asset pack and sentiment model under the platformdirs user cache for
 `objectionengine2`. The first render populates the cache. See the cache path
-with `uv run python -c 'from objectionengine2.cache import cache_path; print(cache_path())'`.
-Run from the Teams checkout:
+with `uv run --no-project --with objectionengine2-teams python -c 'from objectionengine2.cache import cache_path; print(cache_path())'`.
+Run the installed command:
 
 ```bash
-cd ~/development/objectionengine2-teams
 mkdir -p outputs
-uv run --locked objectionengine2-teams \
+objectionengine2-teams \
   'https://teams.microsoft.com/l/chat/19:example@thread.v2/conversations' \
   -o outputs/teams.mp4
 ```
@@ -38,7 +36,7 @@ starts at the linked message. You can bound the render with another message
 link in the same chat or channel thread:
 
 ```bash
-uv run --locked objectionengine2-teams \
+objectionengine2-teams \
   '<start message link>' --end-link '<end message link>' -o outputs/teams.mp4
 ```
 
@@ -59,7 +57,7 @@ permission needed for the link:
 
 | Link | Delegated Microsoft Graph permission |
 | --- | --- |
-| Chat | `Chat.Read` |
+| Chat | `Chat.ReadWrite` |
 | Channel | `ChannelMessage.Read.All` |
 
 The signed-in user must have access to the conversation. Microsoft Entra may
@@ -79,9 +77,9 @@ it can use the Windows broker as well. On other Linux setups it may open a
 browser if a supported broker is unavailable. To select another method, use:
 
 ```bash
-uv run --locked objectionengine2-teams '<Teams message link>' \
+objectionengine2-teams '<Teams message link>' \
   --auth-method browser -o outputs/teams.mp4
-uv run --locked objectionengine2-teams '<Teams message link>' \
+objectionengine2-teams '<Teams message link>' \
   --auth-method device-code -o outputs/teams.mp4
 ```
 
@@ -102,7 +100,7 @@ Teams messages have no explicit `Comment.score`. Teams renders use the core
 Hugging Face sentiment model by default. The normal command is enough:
 
 ```bash
-uv run --locked objectionengine2-teams \
+objectionengine2-teams \
   '<Teams message link>' -o outputs/teams.mp4
 ```
 
@@ -136,8 +134,12 @@ with `objectionengine2.renderer.render_comment_list` directly.
 
 ## Tests
 
+For development, clone the repository and install its locked dependencies with
+uv:
+
 ```bash
 cd ~/development/objectionengine2-teams
+uv sync --locked
 uv run --locked pytest -q
 uv build --no-sources
 ```
