@@ -62,20 +62,29 @@ that cannot be downloaded are omitted.
 
 The default public client ID is the requested Microsoft Office ID,
 `d3590ed6-52b3-4102-aeff-aad2292ab01c`. Azure Identity uses
-`InteractiveBrowserBrokerCredential` by default and requests only the delegated
-permission needed for the link:
+`InteractiveBrowserBrokerCredential` by default. The CLI requests Microsoft
+Graph **delegated** permissions for the signed-in user:
 
-| Link | Delegated Microsoft Graph permission |
-| --- | --- |
-| Chat | `Chat.ReadWrite` |
-| Channel | `ChannelMessage.Read.All` |
+| Used for | Delegated Microsoft Graph permission | When requested |
+| --- | --- | --- |
+| Reading chat messages | `Chat.ReadWrite` | For a chat link |
+| Reading channel messages | `ChannelMessage.Read.All` | For a channel link |
+| Downloading SharePoint images | `Files.Read` | When a supported SharePoint image is encountered |
 
-The signed-in user must have access to the conversation. Microsoft Entra may
-reject this client or require administrator consent, especially for the channel
-permission. The client ID does not itself guarantee a grant. If the Office
-client cannot obtain the requested scope, register a public client application
-in your tenant with the Graph delegated permission and pass its ID through
-`--client-id`. Broker sign-in uses the platform's broker redirect URI; on
+The signed-in user must have access to the conversation and, for SharePoint
+images, the referenced files. Teams-hosted inline images use the conversation
+permission; `Files.Read` is requested separately only for SharePoint images.
+The CLI may prompt for additional consent when it first encounters one. If file
+access or consent fails, it warns and omits the image while continuing the render.
+With `--auth-method cache`, the required token must already be available in the
+cache because that mode cannot prompt.
+
+Microsoft Entra may reject the default client or require administrator consent,
+especially for channel messages. The client ID does not itself guarantee a
+grant. If the Office client cannot obtain the requested scopes, register a
+public client application in your tenant with the delegated permissions needed
+for your links and pass its ID through `--client-id`. Broker sign-in uses the
+platform's broker redirect URI; on
 Windows and WSL, that is
 `ms-appx-web://Microsoft.AAD.BrokerPlugin/<client-id>`. The application must
 allow that redirect. The `--redirect-uri` option applies only to explicit
