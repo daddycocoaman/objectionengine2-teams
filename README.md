@@ -29,7 +29,11 @@ objectionengine2-teams \
 ```
 
 Replace the example URL with a real link copied from a chat or channel. A
-channel link renders the channel; a channel **message link** renders only its
+successful render saves its settings next to the video as `teams.mp4.json`.
+The file includes the rendered conversation, Teams links and authentication
+settings, but no tokens. Evidence paths refer to files in the local image cache.
+Scene choices are randomized, so the settings do not guarantee an identical video.
+A channel link renders the channel; a channel **message link** renders only its
 thread. Its `parentMessageId` identifies the thread root, while the message ID
 in the URL path is the first message rendered. A chat message link likewise
 starts at the linked message. You can bound the render with another message
@@ -42,9 +46,8 @@ objectionengine2-teams \
 
 Both endpoints are included. `--max-messages 20` selects the first 20 rendered
 messages after a start link, or the newest 20 for an unbounded chat/channel
-link. The CLI sorts them by creation time. When a channel thread's first
-message has a title, it appears before that message's body in its comment.
-Starting from a later reply excludes the first message and its title. Rich
+link. The CLI sorts them by creation time, skips empty messages, and excludes
+thread titles from dialogue. Rich
 reactions, deleted messages, and system events are not represented. The first
 inline image in each message is displayed as evidence when Microsoft Graph
 provides it as hosted content. Other attachments become a short placeholder

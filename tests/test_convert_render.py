@@ -1,3 +1,4 @@
+import json
 import os
 
 import pytest
@@ -57,7 +58,7 @@ def test_generic_image_alt_text_is_not_added_to_dialogue():
     assert comment.evidence_path == "/tmp/evidence.png"
 
 
-def test_thread_title_is_included_with_root_message_and_respects_range():
+def test_thread_title_is_excluded_and_range_is_respected():
     root = _message(
         "100", "2026-01-01T00:00:00Z", "<p>Body &amp; details</p>",
         subject="  Important   update  ",
@@ -66,7 +67,7 @@ def test_thread_title_is_included_with_root_message_and_respects_range():
 
     comments = messages_to_comments([reply, root])
     assert [comment.text_content for comment in comments] == [
-        "Important update\nBody & details", "Reply",
+        "Body & details", "Reply",
     ]
     assert comments[0].user_name == "Alex"
     assert [comment.text_content for comment in messages_to_comments(
@@ -74,12 +75,21 @@ def test_thread_title_is_included_with_root_message_and_respects_range():
     )] == ["Reply"]
 
 
-def test_title_only_root_is_renderable_and_blank_title_is_ignored():
+def test_title_only_root_is_skipped():
     title_only = _message("100", "2026-01-01T00:00:00Z", "", subject="Topic")
     no_title = _message("101", "2026-01-02T00:00:00Z", "Body", subject="  ")
     assert [comment.text_content for comment in messages_to_comments([no_title, title_only])] == [
-        "Topic", "Body",
+        "Body",
     ]
+
+
+def test_empty_and_invisible_messages_are_skipped_before_limit():
+    messages = [
+        _message("1", "2026-01-01T00:00:00Z", "<p>&nbsp;\u200b</p>"),
+        _message("2", "2026-01-02T00:00:00Z", "<p>  Hello  </p>"),
+        _message("3", "2026-01-03T00:00:00Z", "<div><br></div>"),
+    ]
+    assert [comment.text_content for comment in messages_to_comments(messages, max_messages=1)] == ["Hello"]
 
 
 def test_message_range_is_inclusive_and_starts_at_path_id():
@@ -153,7 +163,7 @@ def test_fetch_comments_renders_only_requested_channel_thread_range(monkeypatch)
     ]
 
 
-def test_fetch_comments_includes_channel_thread_title(monkeypatch):
+def test_fetch_comments_excludes_channel_thread_title(monkeypatch):
     group_id = "72602e12-78ac-474c-99d6-f619710353a9"
     link = (
         "https://teams.microsoft.com/l/message/19:abc@thread.tacv2/100"
@@ -181,7 +191,7 @@ def test_fetch_comments_includes_channel_thread_title(monkeypatch):
 
     monkeypatch.setattr(render_module, "GraphClient", FakeGraph)
     assert [comment.text_content for comment in render_module.fetch_comments(link)] == [
-        "Thread title\nFirst post", "Reply",
+        "First post", "Reply",
     ]
 
 
@@ -260,10 +270,19 @@ def test_render_bridge_passes_comments_to_core(monkeypatch, tmp_path):
     output = tmp_path / "teams.mp4"
     assert render_module.render_teams_link("https://example.invalid", output, max_messages=1) == output
     assert calls == [((comments,), {"output_filename": str(output), "music_code": "pwr", "resolution_scale": 1})]
+    config = json.loads((tmp_path / "teams.mp4.json").read_text())
+    assert config["link"] == "https://example.invalid"
+    assert config["max_messages"] == 1
+    assert config["sentiment_model"] == "hf"
+    assert config["output_filename"] == str(output)
+    assert config["conversation"] == [{
+        "user_id": "alex", "user_name": "Alex", "text_content": "Objection!",
+        "score": 0, "evidence_path": None,
+    }]
     assert "oe_sentiment_model" not in os.environ
 
 
-def test_render_respects_explicit_neutral_sentiment(monkeypatch):
+def test_render_respects_explicit_neutral_sentiment(monkeypatch, tmp_path):
     monkeypatch.setenv("oe_sentiment_model", "neutral")
     monkeypatch.setattr(
         render_module, "fetch_comments",
@@ -275,12 +294,13 @@ def test_render_respects_explicit_neutral_sentiment(monkeypatch):
         "render_comment_list",
         lambda *args, **kwargs: modes.append(os.environ["oe_sentiment_model"]),
     )
-    render_module.render_teams_link("https://example.invalid")
+    render_module.render_teams_link("https://example.invalid", tmp_path / "teams.mp4")
     assert modes == ["neutral"]
+    assert json.loads((tmp_path / "teams.mp4.json").read_text())["sentiment_model"] == "neutral"
     assert os.environ["oe_sentiment_model"] == "neutral"
 
 
-def test_render_restores_sentiment_setting_after_failure(monkeypatch):
+def test_render_restores_sentiment_setting_after_failure(monkeypatch, tmp_path):
     monkeypatch.delenv("oe_sentiment_model", raising=False)
     monkeypatch.setattr(
         render_module, "fetch_comments",
@@ -293,8 +313,9 @@ def test_render_restores_sentiment_setting_after_failure(monkeypatch):
 
     monkeypatch.setattr(render_module, "render_comment_list", fail)
     with pytest.raises(RuntimeError, match="render failed"):
-        render_module.render_teams_link("https://example.invalid")
+        render_module.render_teams_link("https://example.invalid", tmp_path / "teams.mp4")
     assert "oe_sentiment_model" not in os.environ
+    assert not (tmp_path / "teams.mp4.json").exists()
 
 
 def test_empty_chat_is_clear_error(monkeypatch):

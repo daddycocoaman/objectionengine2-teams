@@ -2,6 +2,7 @@
 
 from html.parser import HTMLParser
 import re
+import unicodedata
 from typing import Any, Callable, Iterable
 
 from objectionengine2.beans.comment import Comment
@@ -41,8 +42,6 @@ class _TeamsHTMLParser(HTMLParser):
 
 
 def _message_text(message: dict[str, Any]) -> str:
-    subject = message.get("subject")
-    title = re.sub(r"\s+", " ", subject).strip() if isinstance(subject, str) else ""
     body = message.get("body") or {}
     if not isinstance(body, dict):
         body = {}
@@ -55,13 +54,15 @@ def _message_text(message: dict[str, Any]) -> str:
         content = "".join(parser.parts)
     lines = [re.sub(r"\s+", " ", line).strip() for line in content.splitlines()]
     text = "\n".join(line for line in lines if line)
+    if not any(not char.isspace() and not unicodedata.category(char).startswith("C") for char in text):
+        text = ""
     if not text:
         attachments = message.get("attachments") or []
         if isinstance(attachments, list) and attachments:
             names = [attachment.get("name") for attachment in attachments if isinstance(attachment, dict)]
             names = [name for name in names if isinstance(name, str) and name.strip()]
             text = "Shared an attachment" + (": " + ", ".join(names) if names else "")
-    return "\n".join(part for part in (title, text) if part)
+    return text
 
 
 def _speaker(message: dict[str, Any]) -> tuple[str, str]:

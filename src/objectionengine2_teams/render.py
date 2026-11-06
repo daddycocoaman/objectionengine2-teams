@@ -1,6 +1,7 @@
 """Public Teams-to-video API."""
 
 from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 
@@ -106,10 +107,36 @@ def render_teams_link(
         raise ValueError("This Teams conversation has no renderable messages")
     output = Path(output_filename)
     with _default_sentiment():
+        configuration = {
+            "link": link,
+            "end_link": end_link,
+            "output_filename": str(output),
+            "max_messages": max_messages,
+            "client_id": client_id,
+            "auth_method": auth_method,
+            "redirect_uri": redirect_uri,
+            "music_code": music_code,
+            "resolution_scale": resolution_scale,
+            "sentiment_model": "neutral" if os.getenv("oe_bypass_sentiment") else (os.getenv("oe_sentiment_model", "neutral").lower() or "neutral"),
+            "direct_h264_encoding": os.getenv("OE_DIRECT_H264_ENCODING", "false").lower() == "true",
+            "conversation": [
+                {
+                    "user_id": comment.user_id,
+                    "user_name": comment.user_name,
+                    "text_content": comment.text_content,
+                    "score": comment.score,
+                    "evidence_path": comment.evidence_path,
+                }
+                for comment in comments
+            ],
+        }
         render_comment_list(
             comments,
             output_filename=str(output),
             music_code=music_code,
             resolution_scale=resolution_scale,
         )
+    Path(f"{output}.json").write_text(
+        json.dumps(configuration, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return output
